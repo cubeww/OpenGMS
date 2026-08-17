@@ -10,14 +10,19 @@
       stroke="#76b33d"
       stroke-width="48"
     />
-    <text
-      x="512"
-      y="714"
-      fill="#a1e15e"
-      font-family="Segoe UI, Arial, sans-serif"
-      font-size="560"
-      font-weight="800"
-      text-anchor="middle"
-    >G</text>
+    <path
+      d="M 687 360
+         C 639 306 578 280 503 280
+         C 369 280 280 377 280 512
+         C 280 647 369 744 503 744
+         C 582 744 648 716 697 661
+         L 697 530
+         L 526 530"
+      fill="none"
+      stroke="#a1e15e"
+      stroke-width="104"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
   </g>
 </svg>
