@@ -1,0 +1,33 @@
+# Dependencies
+/node_modules/
+
+# Local reference material and sample projects
+/references/
+
+# Build and packaging output
+/out/
+/release/
+/dist/
+/build/
+/coverage/
+
+# Local caches and temporary files
+/.cache/
+/.electron/
+/.npm/
+/.temp/
+/temp/
+/.tmp/
+/tmp/
+
+# Local editor settings
+/.idea/
+/.vscode/
+
+# Logs and TypeScript build state
+*.log
+*.tsbuildinfo
+
+# Operating-system files
+.DS_Store
+Thumbs.db

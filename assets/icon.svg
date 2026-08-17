@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <g transform="rotate(-6 512 512)">
+    <rect
+      x="96"
+      y="96"
+      width="832"
+      height="832"
+      rx="210"
+      fill="#182511"
+      stroke="#76b33d"
+      stroke-width="48"
+    />
+    <text
+      x="512"
+      y="714"
+      fill="#a1e15e"
+      font-family="Segoe UI, Arial, sans-serif"
+      font-size="560"
+      font-weight="800"
+      text-anchor="middle"
+    >G</text>
+  </g>
+</svg>

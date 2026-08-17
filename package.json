@@ -1,0 +1,91 @@
+{
+  "name": "opengms",
+  "version": "1.0.0",
+  "description": "A modern GameMaker Studio 1.4 project editor",
+  "author": "Cube",
+  "private": true,
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev --",
+    "start": "electron-vite preview --",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
+    "build": "npm run typecheck && electron-vite build",
+    "package": "npm run build && electron-builder --dir",
+    "dist": "npm run dist:portable",
+    "dist:portable": "npm run build && electron-builder --win zip --x64"
+  },
+  "build": {
+    "appId": "dev.opengms.editor",
+    "productName": "OpenGMS",
+    "asar": true,
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
+    "extraResources": [
+      {
+        "from": "assets/action-libs",
+        "to": "action-libs",
+        "filter": [
+          "*.lib"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-Windows-${arch}.${ext}",
+      "extraResources": [
+        {
+          "from": "assets/gmx/windows-x64",
+          "to": "gmx"
+        }
+      ]
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Development"
+    }
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.11",
+    "chokidar": "^5.0.0",
+    "dockview-react": "^8.1.0",
+    "i18next": "^26.3.6",
+    "lucide-react": "^1.31.0",
+    "monaco-editor": "^0.56.0",
+    "pixi.js": "^8.19.0",
+    "radix-ui": "^1.6.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-i18next": "^17.0.11",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6"
+  }
+}
