@@ -306,6 +306,8 @@ export function RoomCanvas({
   const hostRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const dragRef = useRef<Drag | null>(null)
+  const canvasOverRef = useRef(false)
+  const spaceHeldRef = useRef(false)
   const cameraRef = useRef<Camera>({ x: 40, y: 40, zoom: 1 })
   const fittedRef = useRef(false)
   const mountedRef = useRef(true)
@@ -316,6 +318,7 @@ export function RoomCanvas({
   const [cursor, setCursor] = useState({ x: 0, y: 0 })
   const [hover, setHover] = useState<Hover | null>(null)
   const [panning, setPanning] = useState(false)
+  const [spaceHeld, setSpaceHeld] = useState(false)
   const [draggingInstance, setDraggingInstance] = useState(false)
   cameraRef.current = camera
 
@@ -384,6 +387,41 @@ export function RoomCanvas({
   }, [])
 
   useEffect(() => setHover(null), [page])
+
+  useEffect(() => {
+    const clearSpace = (): void => {
+      spaceHeldRef.current = false
+      setSpaceHeld(false)
+    }
+    const keyDown = (event: KeyboardEvent): void => {
+      if (event.code !== 'Space' || event.repeat) return
+      spaceHeldRef.current = true
+      if (!canvasOverRef.current && document.activeElement !== canvasRef.current) return
+      const target = event.target
+      const editable =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target instanceof HTMLButtonElement ||
+        target instanceof HTMLAnchorElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      if (!editable) event.preventDefault()
+      setSpaceHeld(true)
+    }
+    const keyUp = (event: KeyboardEvent): void => {
+      if (event.code !== 'Space' || !spaceHeldRef.current) return
+      clearSpace()
+    }
+    window.addEventListener('keydown', keyDown, true)
+    window.addEventListener('keyup', keyUp, true)
+    window.addEventListener('blur', clearSpace)
+    return () => {
+      spaceHeldRef.current = false
+      window.removeEventListener('keydown', keyDown, true)
+      window.removeEventListener('keyup', keyUp, true)
+      window.removeEventListener('blur', clearSpace)
+    }
+  }, [])
 
   useEffect(() => {
     for (const url of urls) {
@@ -568,7 +606,7 @@ export function RoomCanvas({
       ctx.setLineDash([])
     }
 
-    const showPlacement = hover && !panning && !draggingInstance
+    const showPlacement = hover && !panning && !spaceHeld && !draggingInstance
     if (
       showPlacement &&
       page === 'objects' &&
@@ -675,6 +713,7 @@ export function RoomCanvas({
     selectedInstance,
     showGrid,
     size,
+    spaceHeld,
     tileDepth,
     tilePlacement.background,
     tilePlacement.height,
@@ -700,12 +739,14 @@ export function RoomCanvas({
   }
 
   function pointerDown(event: React.PointerEvent<HTMLCanvasElement>): void {
+    event.currentTarget.focus({ preventScroll: true })
     const point = world(event.clientX, event.clientY)
     const target = place(point, event.altKey)
     setCursor({ x: Math.round(point.x), y: Math.round(point.y) })
     setHover({ rawX: point.x, rawY: point.y, ...target })
-    if (event.button === 1) {
+    if (event.button === 1 || (event.button === 0 && spaceHeldRef.current)) {
       event.preventDefault()
+      setSpaceHeld(true)
       event.currentTarget.setPointerCapture(event.pointerId)
       dragRef.current = {
         kind: 'pan',
@@ -846,6 +887,7 @@ export function RoomCanvas({
     }
     dragRef.current = null
     setPanning(false)
+    setSpaceHeld(spaceHeldRef.current && canvasOverRef.current)
     setDraggingInstance(false)
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
@@ -889,9 +931,11 @@ export function RoomCanvas({
   const activeDrag = dragRef.current
   const canvasCursor = panning
     ? 'grabbing'
-    : activeDrag?.kind === 'resize'
-      ? activeDrag.cursor
-      : hoverHandle?.cursor ?? 'default'
+    : spaceHeld
+      ? 'grab'
+      : activeDrag?.kind === 'resize'
+        ? activeDrag.cursor
+        : hoverHandle?.cursor ?? 'default'
 
   return (
     <div ref={hostRef} className={`room-canvas-wrap ${panning ? 'panning' : ''}`}>
@@ -899,11 +943,22 @@ export function RoomCanvas({
         ref={canvasRef}
         className="room-canvas"
         style={{ cursor: canvasCursor }}
+        tabIndex={0}
         onPointerDown={pointerDown}
+        onPointerEnter={() => {
+          canvasOverRef.current = true
+          if (spaceHeldRef.current) setSpaceHeld(true)
+        }}
         onPointerMove={pointerMove}
         onPointerUp={pointerUp}
         onPointerCancel={pointerUp}
-        onPointerLeave={() => { if (!dragRef.current) setHover(null) }}
+        onPointerLeave={() => {
+          canvasOverRef.current = false
+          if (!dragRef.current) {
+            setHover(null)
+            setSpaceHeld(false)
+          }
+        }}
         onWheel={wheel}
         onContextMenu={(event) => event.preventDefault()}
         onAuxClick={(event) => event.preventDefault()}

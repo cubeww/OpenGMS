@@ -652,7 +652,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
           <ResourceSelect value={objectName} options={objectItems} placeholder="Search objects" onChange={setObjectName} />
           <CheckField label="Delete underlying" checked={deleteObjects} onChange={setDeleteObjects} />
         </Group>
-        <p className="room-help">Tip: Click an Object in the resource tree to switch the current placement object. Left click adds or selects an instance. Drag an instance to move it or drag its corner handles to stretch it. Right click deletes. Hold Alt to ignore snapping. Middle drag pans the room.</p>
+        <p className="room-help">Tip: Click an Object in the resource tree to switch the current placement object. Left click adds or selects an instance. Drag an instance to move it or drag its corner handles to stretch it. Right click deletes. Hold Alt to ignore snapping. Middle drag or Space + left drag pans the room.</p>
       </>
     )
   }
