@@ -41,6 +41,7 @@ import { listenSearchReveal } from '../codeSearch'
 import { EditorOk } from '../EditorOk'
 import { ResourceName } from '../ResourceName'
 import { ResourceSelect } from '../ResourceSelect'
+import { createAndOpenResource } from '../resourceCreate'
 import { useSave } from '../save'
 import { useApp } from '../store'
 
@@ -617,6 +618,7 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
   const [draggedAction, setDraggedAction] = useState('')
   const [dropActionPos, setDropActionPos] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
+  const [creatingSprite, setCreatingSprite] = useState(false)
   const imageVersion = useApp((state) => state.imageVersion)
   const updateObject = useApp((state) => state.updateObject)
   const addLog = useApp((state) => state.addLog)
@@ -875,6 +877,20 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
     if (sprite) window.dispatchEvent(new CustomEvent('opengms:open-sprite', { detail: sprite }))
   }
 
+  async function newSprite(): Promise<void> {
+    if (creatingSprite) return
+    const known = new Set(spriteItems.map((item) => item.id))
+    setCreatingSprite(true)
+    try {
+      await createAndOpenResource('sprite')
+      const current = useApp.getState().project
+      const created = items(current, 'sprite').find((item) => !known.has(item.id))
+      if (created) patch({ sprite: created.name })
+    } finally {
+      setCreatingSprite(false)
+    }
+  }
+
   return (
     <section className="object-editor">
       <header className="object-editor-head">
@@ -897,7 +913,9 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
               <div><strong>{data.sprite || 'No sprite'}</strong><span>{sprite?.missing ? 'Resource is missing' : 'Object appearance'}</span></div>
             </div>
             <div className="object-inline-buttons">
-              <button disabled><Plus size={14} /> New</button>
+              <button onClick={() => void newSprite()} disabled={creatingSprite}>
+                <Plus size={14} /> {creatingSprite ? 'Creating…' : 'New'}
+              </button>
               <button onClick={editSprite} disabled={!sprite}><Pencil size={14} /> Edit</button>
             </div>
           </section>

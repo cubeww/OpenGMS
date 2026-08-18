@@ -138,6 +138,8 @@ export async function saveSprite(file: string, projectFolder: string, value: unk
   }
 
   const values: Array<[string, string | number]> = [
+    ['width', int(sprite.width, 0, 32767)],
+    ['height', int(sprite.height, 0, 32767)],
     ['xorig', int(sprite.xOrigin, -32768, 32767)],
     ['yorigin', int(sprite.yOrigin, -32768, 32767)],
     ['colkind', shape],

@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { open, readFile } from 'node:fs/promises'
 import { basename, dirname, extname, relative, resolve, sep } from 'node:path'
 import { DOMParser } from '@xmldom/xmldom'
 import { loadObject } from './object'
@@ -300,12 +300,39 @@ function nestedNumber(root: XmlElement, parent: string, name: string, fallback =
   return Number.isFinite(value) ? value : fallback
 }
 
+async function pngSize(file: string): Promise<{ width: number; height: number } | undefined> {
+  try {
+    const handle = await open(file, 'r')
+    try {
+      const header = Buffer.alloc(24)
+      const result = await handle.read(header, 0, header.length, 0)
+      if (
+        result.bytesRead < header.length ||
+        header.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a' ||
+        header.subarray(12, 16).toString('ascii') !== 'IHDR'
+      ) {
+        return undefined
+      }
+      const width = header.readUInt32BE(16)
+      const height = header.readUInt32BE(20)
+      return width >= 1 && height >= 1 && width <= 32767 && height <= 32767
+        ? { width, height }
+        : undefined
+    } finally {
+      await handle.close()
+    }
+  } catch {
+    return undefined
+  }
+}
+
 async function loadSprite(item: ResourceItem, folder: string): Promise<SpriteData | undefined> {
   const root = await readXml(item.file)
   if (!root || tag(root) !== 'sprite') return undefined
 
   const frames = root ? child(root, 'frames') : undefined
   const frameItems = frames ? children(frames).filter((item) => tag(item) === 'frame') : []
+  const imageFiles: string[] = []
   const spriteFrames = frameItems.map((frame, position) => {
     const value = Number.parseInt(frame.getAttribute('index') ?? '', 10)
     const index = Number.isFinite(value) ? value : position
@@ -313,10 +340,13 @@ async function loadSprite(item: ResourceItem, folder: string): Promise<SpriteDat
     const file = framePath ? filePath(dirname(item.file), framePath, '') : ''
     const valid = Boolean(file) && inside(folder, file)
 
+    const missing = !valid || !existsSync(file)
+    if (!missing) imageFiles.push(file)
+
     return {
       index,
       image: valid ? relative(folder, file).replace(/\\/g, '/') : undefined,
-      missing: !valid || !existsSync(file)
+      missing
     }
   })
 
@@ -324,10 +354,19 @@ async function loadSprite(item: ResourceItem, folder: string): Promise<SpriteDat
   const boxModes: SpriteBoxMode[] = ['auto', 'full', 'manual']
   const textureGroups = child(root, 'TextureGroups')
   const textureGroup = textureGroups ? text(children(textureGroups)[0]) : ''
+  let width = number(root, 'width')
+  let height = number(root, 'height')
+  if ((width < 1 || height < 1) && imageFiles[0]) {
+    const size = await pngSize(imageFiles[0])
+    if (size) {
+      if (width < 1) width = size.width
+      if (height < 1) height = size.height
+    }
+  }
 
   return {
-    width: number(root, 'width'),
-    height: number(root, 'height'),
+    width,
+    height,
     xOrigin: number(root, 'xorig'),
     yOrigin: number(root, 'yorigin'),
     shape: shapes[number(root, 'colkind')] ?? 'precise',
