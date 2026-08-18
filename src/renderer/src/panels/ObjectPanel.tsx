@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   AlarmClock,
   ArrowDown,
@@ -8,7 +9,9 @@ import {
   Braces,
   ChevronLeft,
   CircleDot,
+  ClipboardPaste,
   Clock3,
+  Copy,
   Footprints,
   Image as ImageIcon,
   Keyboard,
@@ -17,6 +20,7 @@ import {
   Paintbrush,
   Pencil,
   Plus,
+  Scissors,
   Sparkles,
   Trash2,
   X,
@@ -69,6 +73,19 @@ type EventCategory = {
   icon: LucideIcon
   event?: ObjectEvent
   group?: PickerGroup
+}
+
+type ClipboardKind = 'action' | 'event'
+
+type ObjectClipboard =
+  | { kind: 'action'; action: ObjectAction }
+  | { kind: 'event'; event: ObjectEvent }
+
+type ClipboardMenu = {
+  kind: ClipboardKind
+  index: number | null
+  x: number
+  y: number
 }
 
 const eventCategories: EventCategory[] = [
@@ -160,7 +177,9 @@ const commonKeys: Array<[number, string]> = [
 ]
 
 let actionRequest: Promise<ActionLibrary[]> | null = null
+let objectClipboard: ObjectClipboard | null = null
 const actionDragType = 'application/x-opengms-action'
+const actionMoveDragType = 'application/x-opengms-object-action'
 
 export function loadActions(): Promise<ActionLibrary[]> {
   if (!actionRequest) {
@@ -176,16 +195,31 @@ function makeEvent(type: number, number = 0, target = ''): ObjectEvent {
   return { type, number, target, actions: [] }
 }
 
+function copyAction(action: ObjectAction): ObjectAction {
+  return { ...action, args: action.args.map((arg) => ({ ...arg })) }
+}
+
+function copyEvent(event: ObjectEvent): ObjectEvent {
+  return { ...event, actions: event.actions.map(copyAction) }
+}
+
+function writeObjectClipboard(value: ObjectClipboard): void {
+  objectClipboard = value.kind === 'action'
+    ? { kind: 'action', action: copyAction(value.action) }
+    : { kind: 'event', event: copyEvent(value.event) }
+}
+
+function readObjectClipboard(): ObjectClipboard | null {
+  if (!objectClipboard) return null
+  return objectClipboard.kind === 'action'
+    ? { kind: 'action', action: copyAction(objectClipboard.action) }
+    : { kind: 'event', event: copyEvent(objectClipboard.event) }
+}
+
 function copyObject(object: ObjectData): ObjectData {
   return {
     ...object,
-    events: object.events.map((event) => ({
-      ...event,
-      actions: event.actions.map((action) => ({
-        ...action,
-        args: action.args.map((arg) => ({ ...arg }))
-      }))
-    })),
+    events: object.events.map(copyEvent),
     physics: {
       ...object.physics,
       points: object.physics.points.map((point) => ({ ...point }))
@@ -196,6 +230,26 @@ function copyObject(object: ObjectData): ObjectData {
 function errorText(error: unknown): string {
   if (!(error instanceof Error)) return 'Operation failed'
   return error.message.replace(/^Error invoking remote method '[^']+':\s*/i, '')
+}
+
+function ClipboardMenuItem({
+  icon: Icon,
+  label,
+  disabled,
+  onClick
+}: {
+  icon: LucideIcon
+  label: string
+  disabled?: boolean
+  onClick: () => void
+}): React.JSX.Element {
+  return (
+    <button type="button" role="menuitem" disabled={disabled} onClick={onClick}>
+      <span className="resource-menu-icon"><Icon size={15} /></span>
+      <span>{label}</span>
+      <kbd />
+    </button>
+  )
 }
 
 function items(project: Project | null, type: ResourceType): ObjectItem[] {
@@ -616,7 +670,9 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
   const [library, setLibrary] = useState('')
   const [libraryError, setLibraryError] = useState('')
   const [draggedAction, setDraggedAction] = useState('')
+  const [draggedActionPos, setDraggedActionPos] = useState<number | null>(null)
   const [dropActionPos, setDropActionPos] = useState<number | null>(null)
+  const [clipboardMenu, setClipboardMenu] = useState<ClipboardMenu | null>(null)
   const [saving, setSaving] = useState(false)
   const [creatingSprite, setCreatingSprite] = useState(false)
   const imageVersion = useApp((state) => state.imageVersion)
@@ -644,6 +700,26 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
   useEffect(() => {
     api.setTitle(`${params.item.name}${dirty ? ' •' : ''}`)
   }, [api, dirty, params.item.name])
+
+  useEffect(() => {
+    if (!clipboardMenu) return
+    const close = (event: PointerEvent): void => {
+      const target = event.target
+      if (!(target instanceof Element) || !target.closest('.object-clipboard-menu')) setClipboardMenu(null)
+    }
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setClipboardMenu(null)
+    }
+    const blur = (): void => setClipboardMenu(null)
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', escape)
+    window.addEventListener('blur', blur)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', escape)
+      window.removeEventListener('blur', blur)
+    }
+  }, [clipboardMenu])
 
   useEffect(() => {
     if (!object?.events.length) {
@@ -767,12 +843,16 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
     setPicker(null)
   }
 
-  function deleteEvent(): void {
-    if (eventPos < 0) return
-    patch({ events: data.events.filter((_event, index) => index !== eventPos) })
-    setEventPos(Math.min(eventPos, data.events.length - 2))
+  function removeEvent(index: number): void {
+    if (index < 0 || index >= data.events.length) return
+    patch({ events: data.events.filter((_event, position) => position !== index) })
+    setEventPos(Math.min(index, data.events.length - 2))
     setActionPos(-1)
     setEditing(false)
+  }
+
+  function deleteEvent(): void {
+    removeEvent(eventPos)
   }
 
   function openEventCode(event: ObjectEvent, index: number): void {
@@ -825,13 +905,37 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
     event.dataTransfer.setData(actionDragType, key)
     event.dataTransfer.setData('text/plain', info.description || info.name)
     setDraggedAction(key)
+    setDraggedActionPos(null)
+    setDropActionPos(null)
+  }
+
+  function startActionDrag(event: React.DragEvent<HTMLButtonElement>, index: number): void {
+    if (!selectedEvent) {
+      event.preventDefault()
+      return
+    }
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData(actionMoveDragType, `${eventPos}:${index}`)
+    event.dataTransfer.setData('text/plain', actionSummary(selectedEvent.actions[index], actionMap.get(actionKey(selectedEvent.actions[index]))))
+    setActionPos(index)
+    setEditing(false)
+    setDraggedAction('')
+    setDraggedActionPos(index)
+    setDropActionPos(null)
+  }
+
+  function finishActionDrag(): void {
+    setDraggedAction('')
+    setDraggedActionPos(null)
     setDropActionPos(null)
   }
 
   function dragOverActions(event: React.DragEvent<HTMLDivElement>): void {
-    if (!selectedEvent || !draggedAction) return
+    const moving = draggedActionPos !== null || event.dataTransfer.types.includes(actionMoveDragType)
+    const copying = Boolean(draggedAction) || event.dataTransfer.types.includes(actionDragType)
+    if (!selectedEvent || (!moving && !copying)) return
     event.preventDefault()
-    event.dataTransfer.dropEffect = 'copy'
+    event.dataTransfer.dropEffect = moving ? 'move' : 'copy'
     const index = actionDropIndex(event)
     setDropActionPos((current) => current === index ? current : index)
   }
@@ -843,24 +947,121 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
 
   function dropAction(event: React.DragEvent<HTMLDivElement>): void {
     if (!selectedEvent) return
+    const move = event.dataTransfer.getData(actionMoveDragType) || (
+      draggedActionPos !== null ? `${eventPos}:${draggedActionPos}` : ''
+    )
+    if (move) {
+      event.preventDefault()
+      const [sourceEvent, sourceAction] = move.split(':').map(Number)
+      const dropIndex = actionDropIndex(event)
+      finishActionDrag()
+      if (
+        !Number.isInteger(sourceEvent) ||
+        !Number.isInteger(sourceAction) ||
+        sourceEvent !== eventPos ||
+        sourceAction < 0 ||
+        sourceAction >= selectedEvent.actions.length
+      ) return
+
+      const actions = [...selectedEvent.actions]
+      const [action] = actions.splice(sourceAction, 1)
+      const target = Math.max(0, Math.min(dropIndex > sourceAction ? dropIndex - 1 : dropIndex, actions.length))
+      actions.splice(target, 0, action)
+      changeEvent(eventPos, { ...selectedEvent, actions })
+      setActionPos(target)
+      return
+    }
+
     const key = event.dataTransfer.getData(actionDragType) || draggedAction
     const info = actionMap.get(key)
     if (!info) return
     event.preventDefault()
     const index = actionDropIndex(event)
-    setDropActionPos(null)
-    setDraggedAction('')
+    finishActionDrag()
     addAction(info, index)
   }
 
-  function deleteAction(): void {
-    if (!selectedEvent || actionPos < 0) return
+  function removeAction(index: number): void {
+    if (!selectedEvent || index < 0 || index >= selectedEvent.actions.length) return
     changeEvent(eventPos, {
       ...selectedEvent,
-      actions: selectedEvent.actions.filter((_action, index) => index !== actionPos)
+      actions: selectedEvent.actions.filter((_action, position) => position !== index)
     })
-    setActionPos(Math.min(actionPos, selectedEvent.actions.length - 2))
+    setActionPos(Math.min(index, selectedEvent.actions.length - 2))
     setEditing(false)
+  }
+
+  function deleteAction(): void {
+    removeAction(actionPos)
+  }
+
+  function showClipboardMenu(
+    event: React.MouseEvent,
+    kind: ClipboardKind,
+    index: number | null
+  ): void {
+    event.preventDefault()
+    event.stopPropagation()
+    if (kind === 'action' && !selectedEvent) return
+    if (index !== null) {
+      if (kind === 'event') {
+        setEventPos(index)
+        setActionPos(-1)
+        setEditing(false)
+      } else {
+        setActionPos(index)
+      }
+    }
+    setClipboardMenu({ kind, index, x: event.clientX, y: event.clientY })
+  }
+
+  function copyFromMenu(cut: boolean): void {
+    if (!clipboardMenu || clipboardMenu.index === null) return
+    if (clipboardMenu.kind === 'event') {
+      const event = data.events[clipboardMenu.index]
+      if (!event) return
+      writeObjectClipboard({ kind: 'event', event })
+      if (cut) removeEvent(clipboardMenu.index)
+    } else {
+      const action = selectedEvent?.actions[clipboardMenu.index]
+      if (!action) return
+      writeObjectClipboard({ kind: 'action', action })
+      if (cut) removeAction(clipboardMenu.index)
+    }
+    setClipboardMenu(null)
+  }
+
+  function pasteFromMenu(): void {
+    if (!clipboardMenu) return
+    const clipboard = readObjectClipboard()
+    if (!clipboard || clipboard.kind !== clipboardMenu.kind) return
+
+    if (clipboard.kind === 'event') {
+      const duplicate = data.events.findIndex((event) => eventKey(event) === eventKey(clipboard.event))
+      if (duplicate >= 0) {
+        setEventPos(duplicate)
+        setActionPos(-1)
+        setEditing(false)
+        setClipboardMenu(null)
+        addLog(`Could not paste ${eventName(clipboard.event)}: this object already has that event.`)
+        return
+      }
+      const events = sortEvents([...data.events, clipboard.event], objectItems)
+      patch({ events })
+      setEventPos(events.findIndex((event) => eventKey(event) === eventKey(clipboard.event)))
+      setActionPos(-1)
+      setEditing(false)
+    } else if (selectedEvent) {
+      const actions = [...selectedEvent.actions]
+      const position = clipboardMenu.index === null
+        ? actions.length
+        : Math.min(clipboardMenu.index + 1, actions.length)
+      actions.splice(position, 0, clipboard.action)
+      changeEvent(eventPos, { ...selectedEvent, actions })
+      setActionPos(position)
+      setEditing(false)
+    }
+    setClipboardMenu(null)
   }
 
   function moveAction(step: number): void {
@@ -951,7 +1152,7 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
 
         <section className="object-events">
           <header><strong>Events</strong><span>{data.events.length}</span></header>
-          <div className="object-event-list">
+          <div className="object-event-list" onContextMenu={(event) => showClipboardMenu(event, 'event', null)}>
             {data.events.map((event, index) => {
               const Icon = eventIcon(event.type)
               return (
@@ -960,6 +1161,7 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
                   className={index === eventPos ? 'selected' : ''}
                   onClick={() => { setEventPos(index); setActionPos(-1); setEditing(false) }}
                   onDoubleClick={() => openEventCode(event, index)}
+                  onContextMenu={(mouseEvent) => showClipboardMenu(mouseEvent, 'event', index)}
                 >
                   <span className={`object-event-icon type-${event.type}`}><Icon size={15} /></span>
                   <span>{eventName(event)}</span>
@@ -991,13 +1193,23 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
             onDragOver={dragOverActions}
             onDragLeave={leaveActions}
             onDrop={dropAction}
+            onContextMenu={(event) => showClipboardMenu(event, 'action', null)}
           >
             {selectedEvent?.actions.map((action, index) => {
               const info = actionMap.get(actionKey(action))
               return (
                 <Fragment key={`${actionKey(action)}:${index}`}>
                   {dropActionPos === index && <div className="object-action-drop-line" />}
-                  <button className={index === actionPos ? 'selected' : ''} onClick={() => setActionPos(index)} onDoubleClick={() => { setActionPos(index); setEditing(true) }}>
+                  <button
+                    className={`${index === actionPos ? 'selected' : ''}${index === draggedActionPos ? ' dragging' : ''}`}
+                    draggable
+                    onDragStart={(event) => startActionDrag(event, index)}
+                    onDragEnd={finishActionDrag}
+                    onClick={() => setActionPos(index)}
+                    onDoubleClick={() => { setActionPos(index); setEditing(true) }}
+                    onContextMenu={(mouseEvent) => showClipboardMenu(mouseEvent, 'action', index)}
+                    title="Drag to reorder; double-click to edit"
+                  >
                     <span className="object-action-number">{index + 1}</span>
                     <span className="object-action-icon">{info?.icon ? <img src={info.icon} alt="" /> : <Braces size={17} />}</span>
                     <span className="object-action-text"><strong>{info?.name || (action.kind === 7 ? 'Execute Code' : `Action ${action.id}`)}</strong><small>{actionSummary(action, info)}</small></span>
@@ -1027,7 +1239,7 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
                 className={draggedAction === actionKey(action) ? 'dragging' : ''}
                 draggable={Boolean(selectedEvent)}
                 onDragStart={(event) => startLibraryDrag(event, action)}
-                onDragEnd={() => { setDraggedAction(''); setDropActionPos(null) }}
+                onDragEnd={finishActionDrag}
                 onClick={() => addAction(action)}
                 disabled={!selectedEvent}
                 title={`${action.description || action.name}\nDrag or click to add`}
@@ -1040,6 +1252,38 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
           </div>
         </aside>
       </div>
+
+      {clipboardMenu && createPortal(
+        <div
+          className="resource-context-menu object-clipboard-menu"
+          style={{
+            left: Math.max(4, Math.min(clipboardMenu.x, window.innerWidth - 216)),
+            top: Math.max(4, Math.min(clipboardMenu.y, window.innerHeight - 102))
+          }}
+          role="menu"
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <ClipboardMenuItem
+            icon={Scissors}
+            label={`Cut ${clipboardMenu.kind === 'event' ? 'Event' : 'Action'}`}
+            disabled={clipboardMenu.index === null}
+            onClick={() => copyFromMenu(true)}
+          />
+          <ClipboardMenuItem
+            icon={Copy}
+            label={`Copy ${clipboardMenu.kind === 'event' ? 'Event' : 'Action'}`}
+            disabled={clipboardMenu.index === null}
+            onClick={() => copyFromMenu(false)}
+          />
+          <ClipboardMenuItem
+            icon={ClipboardPaste}
+            label={`Paste ${clipboardMenu.kind === 'event' ? 'Event' : 'Action'}`}
+            disabled={objectClipboard?.kind !== clipboardMenu.kind}
+            onClick={pasteFromMenu}
+          />
+        </div>,
+        document.body
+      )}
 
       {picker && <EventPicker title={picker === 'change' ? 'Change Event' : 'Choose the Event to Add'} objectItems={objectItems} onPick={pickEvent} onCancel={() => setPicker(null)} />}
       {editing && selectedAction && (

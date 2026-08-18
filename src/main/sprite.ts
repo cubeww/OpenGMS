@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, relative, resolve } from 'node:path'
+import { canUseFor3D } from '../shared/image'
 import type { SpriteData, SpriteFramesFile, SpriteShape } from '../shared/types'
 
 const shapes: SpriteShape[] = ['precise', 'rectangle', 'ellipse', 'diamond']
@@ -137,14 +138,18 @@ export async function saveSprite(file: string, projectFolder: string, value: unk
     throw new Error('Invalid sprite data')
   }
 
+  const width = int(sprite.width, 0, 32767)
+  const height = int(sprite.height, 0, 32767)
+  const separateMasks = bool(sprite.separateMasks)
+  const for3D = bool(sprite.for3D)
   const values: Array<[string, string | number]> = [
-    ['width', int(sprite.width, 0, 32767)],
-    ['height', int(sprite.height, 0, 32767)],
+    ['width', width],
+    ['height', height],
     ['xorig', int(sprite.xOrigin, -32768, 32767)],
     ['yorigin', int(sprite.yOrigin, -32768, 32767)],
     ['colkind', shape],
     ['coltolerance', int(sprite.tolerance, 0, 255)],
-    ['sepmasks', bool(sprite.separateMasks)],
+    ['sepmasks', shape === 0 ? separateMasks : 0],
     ['bboxmode', boxMode],
     ['bbox_left', int(sprite.box.left, 0, 32767)],
     ['bbox_right', int(sprite.box.right, 0, 32767)],
@@ -152,7 +157,7 @@ export async function saveSprite(file: string, projectFolder: string, value: unk
     ['bbox_bottom', int(sprite.box.bottom, 0, 32767)],
     ['HTile', bool(sprite.tileX)],
     ['VTile', bool(sprite.tileY)],
-    ['For3D', bool(sprite.for3D)]
+    ['For3D', canUseFor3D(width, height) ? for3D : 0]
   ]
 
   let source = await readFile(file, 'utf8')

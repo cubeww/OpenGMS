@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises'
+import { canUseFor3D } from '../shared/image'
 import type { BackgroundData } from '../shared/types'
 
 function int(value: unknown, min: number, max: number): number {
@@ -48,6 +49,9 @@ export async function saveBackground(file: string, value: unknown): Promise<void
     throw new Error('Invalid background data')
   }
 
+  const width = int(background.width, 0, 32767)
+  const height = int(background.height, 0, 32767)
+  const for3D = bool(background.for3D)
   const values: Array<[string, string | number]> = [
     ['istileset', bool(background.tileSet)],
     ['tilewidth', int(background.tileWidth, 0, 32767)],
@@ -58,9 +62,9 @@ export async function saveBackground(file: string, value: unknown): Promise<void
     ['tilevsep', int(background.tileVSeparation, 0, 32767)],
     ['HTile', bool(background.tileX)],
     ['VTile', bool(background.tileY)],
-    ['For3D', bool(background.for3D)],
-    ['width', int(background.width, 0, 32767)],
-    ['height', int(background.height, 0, 32767)],
+    ['For3D', canUseFor3D(width, height) ? for3D : 0],
+    ['width', width],
+    ['height', height],
     ['data', xml(background.data)]
   ]
 

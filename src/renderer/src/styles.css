@@ -2549,6 +2549,20 @@ select:focus-visible {
   accent-color: var(--green);
 }
 
+.sprite-check-field:has(input:disabled),
+.sprite-text-field:has(select:disabled) {
+  opacity: .48;
+}
+
+.sprite-check-field:has(input:disabled) {
+  cursor: default;
+}
+
+.sprite-text-field select:disabled {
+  color: #778291;
+  background: #121820;
+}
+
 .sprite-range-field > span {
   display: flex;
   justify-content: space-between;
@@ -5012,6 +5026,20 @@ select:focus-visible {
   color: #b8c1cd;
   background: #171e27;
   text-align: left;
+  cursor: grab;
+}
+
+.object-action-list > button:active {
+  cursor: grabbing;
+}
+
+.object-action-list > button.dragging {
+  opacity: .48;
+}
+
+.object-clipboard-menu {
+  z-index: 700;
+  width: 210px;
 }
 
 .object-action-list > button:hover,

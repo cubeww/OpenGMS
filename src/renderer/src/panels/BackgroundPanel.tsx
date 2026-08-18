@@ -10,6 +10,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import type { IDockviewPanelProps } from 'dockview-react'
+import { canUseFor3D } from '../../../shared/image'
 import type { BackgroundData, ProjectItem } from '../../../shared/types'
 import { assetUrl } from '../assets'
 import { EditorOk } from '../EditorOk'
@@ -75,17 +76,22 @@ function NumberField({
 function CheckField({
   label,
   checked,
+  disabled,
+  title,
   onChange
 }: {
   label: string
   checked: boolean
+  disabled?: boolean
+  title?: string
   onChange: (checked: boolean) => void
 }): React.JSX.Element {
   return (
-    <label className="sprite-check-field">
+    <label className="sprite-check-field" title={title}>
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
       />
       <span>{label}</span>
@@ -201,9 +207,18 @@ export function BackgroundPanel({
     )
   }
   const data = background
+  const supports3D = canUseFor3D(data.width, data.height)
+  const uses3D = supports3D && data.for3D
 
   function patch(values: Partial<BackgroundData>): void {
-    setBackground((current) => current ? { ...current, ...values } : current)
+    setBackground((current) => {
+      if (!current) return current
+      const next = { ...current, ...values }
+      return {
+        ...next,
+        for3D: canUseFor3D(next.width, next.height) && next.for3D
+      }
+    })
   }
 
   function openImage(): void {
@@ -270,7 +285,10 @@ export function BackgroundPanel({
 
   async function save(): Promise<void> {
     if (!background || !dirty || saving) return
-    const next = copyBackground(background)
+    const next = copyBackground({
+      ...background,
+      for3D: canUseFor3D(background.width, background.height) && background.for3D
+    })
     setSaving(true)
     try {
       await window.openGms.saveBackground(params.item.file, next)
@@ -327,12 +345,18 @@ export function BackgroundPanel({
           </FieldGroup>
 
           <FieldGroup title="Texture" icon={Layers3}>
-            <CheckField label="Tile horizontally" checked={data.tileX} onChange={(tileX) => patch({ tileX })} />
-            <CheckField label="Tile vertically" checked={data.tileY} onChange={(tileY) => patch({ tileY })} />
-            <CheckField label="Used for 3D" checked={data.for3D} onChange={(for3D) => patch({ for3D })} />
+            <CheckField label="Tile horizontally" checked={data.tileX} disabled={uses3D} onChange={(tileX) => patch({ tileX })} />
+            <CheckField label="Tile vertically" checked={data.tileY} disabled={uses3D} onChange={(tileY) => patch({ tileY })} />
+            <CheckField
+              label="Used for 3D"
+              checked={uses3D}
+              disabled={!supports3D}
+              title={!supports3D ? 'Width and height must both be powers of two' : undefined}
+              onChange={(for3D) => patch({ for3D })}
+            />
             <label className="sprite-text-field">
               <span>Texture Group</span>
-              <select value={data.textureGroup} onChange={(event) => patch({ textureGroup: event.target.value })}>
+              <select value={data.textureGroup} disabled={uses3D} onChange={(event) => patch({ textureGroup: event.target.value })}>
                 <option value={data.textureGroup}>{data.textureGroup === '0' ? 'Default' : data.textureGroup}</option>
               </select>
             </label>

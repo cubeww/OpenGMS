@@ -24,6 +24,7 @@ import type {
   SpriteShape,
   StripImage
 } from '../../../shared/types'
+import { canUseFor3D } from '../../../shared/image'
 import { assetUrl } from '../assets'
 import { EditorOk } from '../EditorOk'
 import { ResourceName } from '../ResourceName'
@@ -147,17 +148,22 @@ function NumberField({
 function CheckField({
   label,
   checked,
+  disabled,
+  title,
   onChange
 }: {
   label: string
   checked: boolean
+  disabled?: boolean
+  title?: string
   onChange: (checked: boolean) => void
 }): React.JSX.Element {
   return (
-    <label className="sprite-check-field">
+    <label className="sprite-check-field" title={title}>
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
       />
       <span>{label}</span>
@@ -304,9 +310,20 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
     )
   }
   const data = sprite
+  const preciseCollision = sprite.shape === 'precise'
+  const supports3D = canUseFor3D(sprite.width, sprite.height)
+  const uses3D = supports3D && sprite.for3D
 
   function patch(values: Partial<SpriteData>): void {
-    setSprite((current) => current ? { ...current, ...values } : current)
+    setSprite((current) => {
+      if (!current) return current
+      const next = { ...current, ...values }
+      return {
+        ...next,
+        separateMasks: next.shape === 'precise' && next.separateMasks,
+        for3D: canUseFor3D(next.width, next.height) && next.for3D
+      }
+    })
   }
 
   function patchBox(name: keyof SpriteData['box'], value: number): void {
@@ -387,6 +404,7 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
       ...current,
       width: result.width,
       height: result.height,
+      for3D: canUseFor3D(result.width, result.height) && current.for3D,
       box: {
         left: 0,
         top: 0,
@@ -471,7 +489,11 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
 
   async function save(): Promise<void> {
     if (!sprite || !dirty || saving) return
-    const next = copySprite(sprite)
+    const next = copySprite({
+      ...sprite,
+      separateMasks: sprite.shape === 'precise' && sprite.separateMasks,
+      for3D: canUseFor3D(sprite.width, sprite.height) && sprite.for3D
+    })
     setSaving(true)
     try {
       await window.openGms.saveSprite(params.item.file, next)
@@ -560,7 +582,9 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
               />
               <CheckField
                 label="Separate collision masks"
-                checked={sprite.separateMasks}
+                checked={preciseCollision && sprite.separateMasks}
+                disabled={!preciseCollision}
+                title={!preciseCollision ? 'Requires precise collision checking' : undefined}
                 onChange={(separateMasks) => patch({ separateMasks })}
               />
               <button className="sprite-wide-button" onClick={() => setPage('mask')}>
@@ -569,12 +593,18 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
             </FieldGroup>
 
             <FieldGroup title="Texture" icon={Square}>
-              <CheckField label="Tile horizontally" checked={sprite.tileX} onChange={(tileX) => patch({ tileX })} />
-              <CheckField label="Tile vertically" checked={sprite.tileY} onChange={(tileY) => patch({ tileY })} />
-              <CheckField label="Used for 3D" checked={sprite.for3D} onChange={(for3D) => patch({ for3D })} />
+              <CheckField label="Tile horizontally" checked={sprite.tileX} disabled={uses3D} onChange={(tileX) => patch({ tileX })} />
+              <CheckField label="Tile vertically" checked={sprite.tileY} disabled={uses3D} onChange={(tileY) => patch({ tileY })} />
+              <CheckField
+                label="Used for 3D"
+                checked={uses3D}
+                disabled={!supports3D}
+                title={!supports3D ? 'Width and height must both be powers of two' : undefined}
+                onChange={(for3D) => patch({ for3D })}
+              />
               <label className="sprite-text-field">
                 <span>Texture Group</span>
-                <select value={sprite.textureGroup} onChange={(event) => patch({ textureGroup: event.target.value })}>
+                <select value={sprite.textureGroup} disabled={uses3D} onChange={(event) => patch({ textureGroup: event.target.value })}>
                   <option value={sprite.textureGroup}>{sprite.textureGroup === '0' ? 'Default' : sprite.textureGroup}</option>
                 </select>
               </label>
@@ -624,7 +654,13 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
             </FieldGroup>
 
             <FieldGroup title="General" icon={Shield}>
-              <CheckField label="Separate collision masks" checked={sprite.separateMasks} onChange={(separateMasks) => patch({ separateMasks })} />
+              <CheckField
+                label="Separate collision masks"
+                checked={preciseCollision && sprite.separateMasks}
+                disabled={!preciseCollision}
+                title={!preciseCollision ? 'Requires the Precise shape' : undefined}
+                onChange={(separateMasks) => patch({ separateMasks })}
+              />
               <label className="sprite-range-field">
                 <span>Alpha Tolerance <strong>{sprite.tolerance}</strong></span>
                 <input type="range" min="0" max="255" value={sprite.tolerance} onChange={(event) => patch({ tolerance: Number(event.target.value) })} />
