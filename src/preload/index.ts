@@ -77,6 +77,8 @@ const api: OpenGmsApi = {
   checkResourceReferences: (ref) => ipcRenderer.invoke('resource:references', ref),
   saveShader: (file, shader) => ipcRenderer.invoke('shader:save', file, shader) as Promise<void>,
   saveSprite: (file, sprite) => ipcRenderer.invoke('sprite:save', file, sprite) as Promise<void>,
+  openSpriteImages: () => ipcRenderer.invoke('sprite:frames-open'),
+  pasteSpriteImage: (file) => ipcRenderer.invoke('sprite:frames-paste', file),
   openSpriteStrip: () => ipcRenderer.invoke('sprite:strip-open'),
   writeSpriteFrames: (file, images) => ipcRenderer.invoke('sprite:frames-write', file, images),
   saveSpriteStrip: (name, dataUrl) =>
@@ -88,6 +90,8 @@ const api: OpenGmsApi = {
   saveBackground: (file, background) =>
     ipcRenderer.invoke('background:save', file, background) as Promise<void>,
   replaceBackground: (file) => ipcRenderer.invoke('background:replace', file),
+  pasteBackgroundImage: (file) => ipcRenderer.invoke('background:paste', file),
+  saveBackgroundImage: (name, image) => ipcRenderer.invoke('background:image-save', name, image),
   saveFont: (file, font, atlas) =>
     ipcRenderer.invoke('font:save', file, font, atlas) as Promise<void>,
   listFonts: () => ipcRenderer.invoke('font:list') as Promise<string[]>,

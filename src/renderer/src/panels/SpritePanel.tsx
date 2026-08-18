@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDot,
+  ClipboardPaste,
   FileInput,
   Image as ImageIcon,
   Images,
@@ -171,7 +172,8 @@ function Preview({
   projectPath,
   version,
   showMask,
-  onStep
+  onStep,
+  onOriginChange
 }: {
   sprite: SpriteData
   frame?: SpriteFrame
@@ -180,6 +182,7 @@ function Preview({
   version: number
   showMask?: boolean
   onStep: (step: number) => void
+  onOriginChange?: (x: number, y: number) => void
 }): React.JSX.Element {
   const size = Math.max(sprite.width, sprite.height, 1)
   const scale = Math.max(1, Math.min(14, Math.floor(480 / size)))
@@ -197,6 +200,17 @@ function Preview({
     top: `${(sprite.yOrigin / Math.max(sprite.height, 1)) * 100}%`
   }
 
+  function pickOrigin(event: React.MouseEvent<HTMLDivElement>): void {
+    if (!onOriginChange || sprite.width < 1 || sprite.height < 1) return
+    const target = event.currentTarget
+    const bounds = target.getBoundingClientRect()
+    const localX = event.clientX - bounds.left - target.clientLeft
+    const localY = event.clientY - bounds.top - target.clientTop
+    const x = Math.max(0, Math.min(sprite.width - 1, Math.floor((localX / target.clientWidth) * sprite.width)))
+    const y = Math.max(0, Math.min(sprite.height - 1, Math.floor((localY / target.clientHeight) * sprite.height)))
+    onOriginChange(x, y)
+  }
+
   return (
     <section className="sprite-preview">
       <div className="sprite-preview-head">
@@ -208,8 +222,10 @@ function Preview({
       </div>
       <div className="sprite-stage">
         <div
-          className="sprite-stage-image"
+          className={`sprite-stage-image${onOriginChange ? ' origin-editable' : ''}`}
           style={{ width: sprite.width * scale, height: sprite.height * scale }}
+          title={onOriginChange ? 'Click to set the origin' : undefined}
+          onClick={onOriginChange ? pickOrigin : undefined}
         >
           <FrameImage
             frame={frame}
@@ -244,6 +260,8 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
   const [playing, setPlaying] = useState(false)
   const [saving, setSaving] = useState(false)
   const [strip, setStrip] = useState<StripImage | null>(null)
+  const [framesLoading, setFramesLoading] = useState(false)
+  const [pasting, setPasting] = useState(false)
   const [stripLoading, setStripLoading] = useState(false)
   const [stripSaving, setStripSaving] = useState(false)
   const imageVersion = useApp((state) => state.imageVersion)
@@ -329,25 +347,86 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
     }
   }
 
+  async function chooseFrames(): Promise<void> {
+    if (framesLoading) return
+    setFramesLoading(true)
+    try {
+      const selected = await window.openGms.openSpriteImages()
+      if (!selected?.length) return
+      const width = Math.max(...selected.map((image) => image.width))
+      const height = Math.max(...selected.map((image) => image.height))
+      const images: string[] = []
+
+      for (const item of selected) {
+        if (item.width === width && item.height === height) {
+          images.push(item.dataUrl)
+          continue
+        }
+        const source = await loadImage(item.dataUrl)
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const context = canvas.getContext('2d')
+        if (!context) throw new Error('Could not create a sprite frame canvas.')
+        context.imageSmoothingEnabled = false
+        context.clearRect(0, 0, width, height)
+        context.drawImage(source, 0, 0)
+        images.push(canvas.toDataURL('image/png'))
+      }
+
+      await replaceFrames(images, 'sprite images')
+    } catch (error) {
+      addLog(`Failed to load sprite images: ${errorText(error)}`)
+    } finally {
+      setFramesLoading(false)
+    }
+  }
+
+  function applyFrames(result: Awaited<ReturnType<typeof window.openGms.writeSpriteFrames>>): void {
+    setSprite((current) => current ? {
+      ...current,
+      width: result.width,
+      height: result.height,
+      box: {
+        left: 0,
+        top: 0,
+        right: result.width - 1,
+        bottom: result.height - 1
+      },
+      frames: result.frames
+    } : current)
+    setFramePos(0)
+    setPlaying(false)
+  }
+
+  async function pasteFrame(): Promise<void> {
+    if (pasting) return
+    setPasting(true)
+    try {
+      const result = await window.openGms.pasteSpriteImage(params.item.file)
+      if (!result) {
+        addLog('Could not paste sprite image: the clipboard does not contain an image.')
+        return
+      }
+      applyFrames(result)
+      addLog(`Pasted clipboard image into ${params.item.name}.`)
+    } catch (error) {
+      addLog(`Failed to paste sprite image: ${errorText(error)}`)
+    } finally {
+      setPasting(false)
+    }
+  }
+
+  async function replaceFrames(images: string[], label: string): Promise<void> {
+    const result = await window.openGms.writeSpriteFrames(params.item.file, images)
+    applyFrames(result)
+    addLog(`Loaded ${result.frames.length} frames from ${label} into ${params.item.name}.`)
+  }
+
   async function importStrip(images: string[]): Promise<void> {
     try {
-      const result = await window.openGms.writeSpriteFrames(params.item.file, images)
-      setSprite((current) => current ? {
-        ...current,
-        width: result.width,
-        height: result.height,
-        box: {
-          left: 0,
-          top: 0,
-          right: result.width - 1,
-          bottom: result.height - 1
-        },
-        frames: result.frames
-      } : current)
-      setFramePos(0)
-      setPlaying(false)
+      await replaceFrames(images, 'sprite strip')
       setStrip(null)
-      addLog(`Loaded ${result.frames.length} frames into ${params.item.name}.`)
     } catch (error) {
       addLog(`Failed to load sprite strip: ${errorText(error)}`)
       throw error
@@ -441,6 +520,17 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
                 <span><strong>{sprite.height}</strong> Height</span>
                 <span><strong>{sprite.frames.length}</strong> Frames</span>
               </div>
+              <div className="sprite-wide-button-row">
+                <button className="sprite-wide-button" onClick={() => void chooseFrames()} disabled={framesLoading || pasting}>
+                  <FileInput size={15} /> {framesLoading ? 'Loading…' : 'Load'}
+                </button>
+                <button className="sprite-wide-button" onClick={() => void pasteFrame()} disabled={pasting || framesLoading}>
+                  <ClipboardPaste size={15} /> {pasting ? 'Pasting…' : 'Paste'}
+                </button>
+                <button className="sprite-wide-button" onClick={() => void saveStrip()} disabled={stripSaving || sprite.frames.length === 0}>
+                  <SaveIcon size={15} /> {stripSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
               <button className="sprite-wide-button" onClick={() => setPage('frames')}>
                 <Pencil size={15} /> Edit Frames
               </button>
@@ -452,7 +542,7 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
                 <NumberField label="Y" value={sprite.yOrigin} onChange={(yOrigin) => patch({ yOrigin })} />
               </div>
               <button
-                className="sprite-wide-button secondary"
+                className="sprite-wide-button"
                 onClick={() => patch({
                   xOrigin: Math.floor(sprite.width / 2),
                   yOrigin: Math.floor(sprite.height / 2)
@@ -497,6 +587,7 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
             projectPath={params.projectPath}
             version={imageVersion}
             onStep={stepFrame}
+            onOriginChange={(xOrigin, yOrigin) => patch({ xOrigin, yOrigin })}
           />
         </div>
       )}

@@ -213,6 +213,7 @@ export function PathPanel({ params, api }: IDockviewPanelProps<PathParams>): Rea
             <ResourceSelect
               value={roomItem?.name ?? ''}
               options={rooms}
+              project={project}
               emptyLabel="None"
               placeholder="Search rooms"
               onChange={(name) => patch({ backgroundRoom: name ? rooms.findIndex((item) => item.name === name) : -1 })}

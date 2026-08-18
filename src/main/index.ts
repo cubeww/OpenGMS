@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, shell } from 'electron'
 import {
   copyFile,
   cp,
@@ -176,6 +176,26 @@ async function droppedImage(file: unknown): Promise<{
   const png = source.toPNG()
   if (png.length < 8 || png.length > 128 * 1024 * 1024) throw new Error('Could not convert image')
   return { file: path, png, width, height }
+}
+
+function clipboardImage(): { png: Buffer; width: number; height: number } | null {
+  const source = clipboard.readImage()
+  if (source.isEmpty()) return null
+  const { width, height } = source.getSize()
+  if (
+    width < 1 ||
+    height < 1 ||
+    width > 32767 ||
+    height > 32767 ||
+    width * height > 64 * 1024 * 1024
+  ) {
+    throw new Error('Unsupported clipboard image size')
+  }
+  const png = source.toPNG()
+  if (png.length < 8 || png.length > 128 * 1024 * 1024) {
+    throw new Error('Could not read the clipboard image')
+  }
+  return { png, width, height }
 }
 
 function pngData(value: unknown, maxSize = 128 * 1024 * 1024): Buffer {
@@ -1142,6 +1162,53 @@ ipcMain.handle('sprite:save', async (_event, file: unknown, sprite: unknown): Pr
   await saveSprite(path, projectFolder, sprite)
 })
 
+ipcMain.handle('sprite:frames-open', async (): Promise<StripImage[] | null> => {
+  if (!projectFolder) throw new Error('No project is open')
+  const window = BrowserWindow.getFocusedWindow() ?? mainWindow
+  if (!window) return null
+  const result = await dialog.showOpenDialog(window, {
+    title: 'Load Sprite Images',
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Image Files', extensions: ['png', 'jpg', 'jpeg'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  if (result.filePaths.length > 2048) throw new Error('Too many sprite images selected')
+
+  const images: StripImage[] = []
+  let total = 0
+  for (const file of result.filePaths) {
+    const image = await droppedImage(file)
+    total += image.png.length
+    if (total > 256 * 1024 * 1024) throw new Error('Sprite images are too large')
+    images.push({
+      name: basename(image.file),
+      dataUrl: `data:image/png;base64,${image.png.toString('base64')}`,
+      width: image.width,
+      height: image.height
+    })
+  }
+  return images
+})
+
+ipcMain.handle(
+  'sprite:frames-paste',
+  async (_event, file: unknown): Promise<SpriteFramesFile | null> => {
+    if (!projectFolder || typeof file !== 'string') throw new Error('No project is open')
+    const path = resolve(file)
+    if (!inside(projectFolder, path) || !path.toLowerCase().endsWith('.sprite.gmx')) {
+      throw new Error('Invalid sprite path')
+    }
+    const image = clipboardImage()
+    if (!image) return null
+    return writeSpriteFrames(path, projectFolder, [
+      `data:image/png;base64,${image.png.toString('base64')}`
+    ])
+  }
+)
+
 ipcMain.handle('sprite:strip-open', async (): Promise<StripImage | null> => {
   if (!projectFolder) throw new Error('No project is open')
   const window = BrowserWindow.getFocusedWindow() ?? mainWindow
@@ -1310,6 +1377,62 @@ ipcMain.handle(
       data: `images\\${name}.png`,
       image: relative(projectFolder, target).replace(/\\/g, '/')
     }
+  }
+)
+
+ipcMain.handle(
+  'background:paste',
+  async (_event, file: unknown): Promise<BackgroundFile | null> => {
+    if (!projectFolder || typeof file !== 'string') throw new Error('No project is open')
+    const descriptor = resolve(file)
+    if (!inside(projectFolder, descriptor) || !descriptor.toLowerCase().endsWith('.background.gmx')) {
+      throw new Error('Invalid background path')
+    }
+    const image = clipboardImage()
+    if (!image) return null
+
+    const name = basename(descriptor).replace(/\.background\.gmx$/i, '')
+    const targetFolder = join(dirname(descriptor), 'images')
+    const target = join(targetFolder, `${name}.png`)
+    if (!inside(projectFolder, target)) throw new Error('Invalid background destination')
+    await mkdir(targetFolder, { recursive: true })
+    await writeFile(target, image.png)
+    return {
+      width: image.width,
+      height: image.height,
+      data: `images\\${name}.png`,
+      image: relative(projectFolder, target).replace(/\\/g, '/')
+    }
+  }
+)
+
+ipcMain.handle(
+  'background:image-save',
+  async (_event, name: unknown, image: unknown): Promise<string | null> => {
+    if (!projectFolder || typeof name !== 'string' || typeof image !== 'string') {
+      throw new Error('No background image is available')
+    }
+    const source = resolve(projectFolder, ...image.replace(/\\/g, '/').split('/').filter(Boolean))
+    if (!inside(projectFolder, source) || extname(source).toLowerCase() !== '.png') {
+      throw new Error('Invalid background image path')
+    }
+    const info = await stat(source)
+    if (!info.isFile()) throw new Error('Background image does not exist')
+
+    const window = BrowserWindow.getFocusedWindow() ?? mainWindow
+    if (!window) return null
+    const stem = basename(name).replace(/\.png$/i, '').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'background'
+    const result = await dialog.showSaveDialog(window, {
+      title: 'Save Background Image',
+      defaultPath: `${stem}.png`,
+      filters: [{ name: 'PNG Image', extensions: ['png'] }]
+    })
+    if (result.canceled || !result.filePath) return null
+    const sameFile = process.platform === 'win32'
+      ? resolve(source).toLowerCase() === resolve(result.filePath).toLowerCase()
+      : resolve(source) === resolve(result.filePath)
+    if (!sameFile) await copyFile(source, result.filePath)
+    return result.filePath
   }
 )
 

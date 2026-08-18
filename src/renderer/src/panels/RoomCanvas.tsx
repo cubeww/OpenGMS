@@ -71,6 +71,18 @@ type RoomCanvasProps = {
 type Drag =
   | { kind: 'pan'; id: number; x: number; y: number; camera: Camera }
   | {
+    kind: 'place'
+    id: number
+    page: 'objects' | 'tiles'
+    points: Set<string>
+  }
+  | {
+    kind: 'erase'
+    id: number
+    page: 'objects' | 'tiles'
+    removed: Set<string>
+  }
+  | {
     kind: 'instance'
     id: number
     name: string
@@ -747,6 +759,26 @@ export function RoomCanvas({
       : { x: snap(point.x, room.snapX), y: snap(point.y, room.snapY) }
   }
 
+  function eraseAt(
+    targetPage: 'objects' | 'tiles',
+    point: { x: number; y: number },
+    removed: Set<string>
+  ): void {
+    if (targetPage === 'objects') {
+      const instance = hitInstance(room, objectVisuals, point.x, point.y)
+      if (!instance || removed.has(instance.name)) return
+      removed.add(instance.name)
+      onDeleteInstance(instance.name)
+      return
+    }
+
+    const tile = hitTile(room, tileDepth, point.x, point.y)
+    const key = tile ? String(tile.id) : ''
+    if (!tile || removed.has(key)) return
+    removed.add(key)
+    onDeleteTile(tile.id)
+  }
+
   function pointerDown(event: React.PointerEvent<HTMLCanvasElement>): void {
     event.currentTarget.focus({ preventScroll: true })
     const point = world(event.clientX, event.clientY)
@@ -769,16 +801,33 @@ export function RoomCanvas({
     }
     if (event.button === 2) {
       event.preventDefault()
-      if (page === 'objects') {
-        const instance = hitInstance(room, objectVisuals, point.x, point.y)
-        if (instance) onDeleteInstance(instance.name)
-      } else if (page === 'tiles') {
-        const tile = hitTile(room, tileDepth, point.x, point.y)
-        if (tile) onDeleteTile(tile.id)
+      if (page === 'objects' || page === 'tiles') {
+        if (event.shiftKey) {
+          const removed = new Set<string>()
+          event.currentTarget.setPointerCapture(event.pointerId)
+          dragRef.current = { kind: 'erase', id: event.pointerId, page, removed }
+          eraseAt(page, point, removed)
+        } else {
+          eraseAt(page, point, new Set())
+        }
       }
       return
     }
     if (event.button !== 0) return
+
+    if (event.shiftKey && (page === 'objects' || page === 'tiles')) {
+      event.preventDefault()
+      event.currentTarget.setPointerCapture(event.pointerId)
+      dragRef.current = {
+        kind: 'place',
+        id: event.pointerId,
+        page,
+        points: new Set([`${target.x}:${target.y}`])
+      }
+      if (page === 'objects') onAddInstance(target.x, target.y)
+      else onAddTile(target.x, target.y)
+      return
+    }
 
     if (page === 'objects') {
       const current = room.instances.find((item) => item.name === selectedInstance)
@@ -848,6 +897,20 @@ export function RoomCanvas({
         x: drag.camera.x + event.clientX - drag.x,
         y: drag.camera.y + event.clientY - drag.y
       })
+      return
+    }
+    if (drag.kind === 'place') {
+      if (!event.shiftKey) return
+      const key = `${target.x}:${target.y}`
+      if (drag.points.has(key)) return
+      drag.points.add(key)
+      if (drag.page === 'objects') onAddInstance(target.x, target.y)
+      else onAddTile(target.x, target.y)
+      return
+    }
+    if (drag.kind === 'erase') {
+      if (!event.shiftKey) return
+      eraseAt(drag.page, point, drag.removed)
       return
     }
     if (drag.kind === 'resize') {
@@ -960,7 +1023,9 @@ export function RoomCanvas({
       ? 'grab'
       : activeDrag?.kind === 'resize'
         ? activeDrag.cursor
-        : hoverHandle?.cursor ?? 'default'
+        : activeDrag?.kind === 'place' || activeDrag?.kind === 'erase'
+          ? 'default'
+          : hoverHandle?.cursor ?? 'default'
 
   return (
     <div ref={hostRef} className={`room-canvas-wrap ${panning ? 'panning' : ''}`}>

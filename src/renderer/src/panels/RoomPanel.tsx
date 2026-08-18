@@ -558,7 +558,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
               </div>
             ) : <div className="room-preview-empty"><Grid3X3 size={24} /><span>No tile sheet</span></div>}
           </div>
-          <ResourceSelect value={tileBackground} options={backgroundItems} placeholder="Search backgrounds" onChange={(value) => { setTileBackground(value); setTileSource({ x: 0, y: 0 }) }} />
+          <ResourceSelect value={tileBackground} options={backgroundItems} project={project} placeholder="Search backgrounds" onChange={(value) => { setTileBackground(value); setTileSource({ x: 0, y: 0 }) }} />
           <div className="room-field-grid"><Field label="X" value={tileSource.x} min={0} onChange={(x) => setTileSource((value) => ({ ...value, x }))} /><Field label="Y" value={tileSource.y} min={0} onChange={(y) => setTileSource((value) => ({ ...value, y }))} /></div>
           <CheckField label="Delete underlying" checked={deleteTiles} onChange={setDeleteTiles} />
         </Group>
@@ -589,7 +589,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
         <Group title={`Background ${backgroundIndex}`}>
           <CheckField label="Visible when room starts" checked={background.visible} onChange={(visible) => patchBackground({ visible })} />
           <CheckField label="Foreground image" checked={background.foreground} onChange={(foreground) => patchBackground({ foreground })} />
-          <ResourceSelect value={background.name} options={backgroundItems} emptyLabel="No background" placeholder="Search backgrounds" onChange={(name) => patchBackground({ name })} />
+          <ResourceSelect value={background.name} options={backgroundItems} project={project} emptyLabel="No background" placeholder="Search backgrounds" onChange={(name) => patchBackground({ name })} />
           <div className="room-paired-check"><CheckField label="Tile horizontally" checked={background.tileX} onChange={(tileX) => patchBackground({ tileX })} /><Field label="X" value={background.x} onChange={(x) => patchBackground({ x })} /></div>
           <div className="room-paired-check"><CheckField label="Tile vertically" checked={background.tileY} onChange={(tileY) => patchBackground({ tileY })} /><Field label="Y" value={background.y} onChange={(y) => patchBackground({ y })} /></div>
           <CheckField label="Stretch" checked={background.stretch} onChange={(stretch) => patchBackground({ stretch })} />
@@ -615,7 +615,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
           <div className="room-field-grid"><Field label="X" value={view.portX} onChange={(portX) => patchView({ portX })} /><Field label="Y" value={view.portY} onChange={(portY) => patchView({ portY })} /><Field label="W" value={view.portWidth} min={1} onChange={(portWidth) => patchView({ portWidth })} /><Field label="H" value={view.portHeight} min={1} onChange={(portHeight) => patchView({ portHeight })} /></div>
         </Group>
         <Group title="Object following">
-          <ResourceSelect value={view.object} options={objectItems} emptyLabel="No object" placeholder="Search objects" onChange={(object) => patchView({ object })} />
+          <ResourceSelect value={view.object} options={objectItems} project={project} emptyLabel="No object" placeholder="Search objects" onChange={(object) => patchView({ object })} />
           <div className="room-field-grid"><Field label="H border" value={view.borderX} min={0} onChange={(borderX) => patchView({ borderX })} /><Field label="V border" value={view.borderY} min={0} onChange={(borderY) => patchView({ borderY })} /><Field label="H speed" value={view.speedX} onChange={(speedX) => patchView({ speedX })} /><Field label="V speed" value={view.speedY} onChange={(speedY) => patchView({ speedY })} /></div>
         </Group>
       </>
@@ -650,7 +650,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
           {selected && <button className="room-wide-button danger" onClick={() => deleteInstance(selected.name)}><Trash2 size={14} /> Delete selected</button>}
         </Group>
         <Group title="Object to add with left mouse">
-          <ResourceSelect value={objectName} options={objectItems} placeholder="Search objects" onChange={setObjectName} />
+          <ResourceSelect value={objectName} options={objectItems} project={project} placeholder="Search objects" onChange={setObjectName} />
           <div className="room-tree-tip"><Info size={14} /><span><strong>Tip:</strong> You can also select an Object in the resource tree.</span></div>
           <CheckField label="Delete underlying" checked={deleteObjects} onChange={setDeleteObjects} />
         </Group>

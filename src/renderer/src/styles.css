@@ -2230,6 +2230,16 @@ select:focus-visible {
   background: #171e27;
 }
 
+.sprite-wide-button-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.sprite-wide-button-row > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .sprite-number-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2339,6 +2349,10 @@ select:focus-visible {
   background-position: 0 0, 0 8px, 8px -8px, -8px 0;
   background-size: 16px 16px;
   box-shadow: 0 12px 35px rgb(0 0 0 / 28%);
+}
+
+.sprite-stage-image.origin-editable {
+  cursor: crosshair;
 }
 
 .sprite-preview-image {
@@ -2918,7 +2932,7 @@ select:focus-visible {
 
 .background-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -5249,6 +5263,55 @@ select:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.resource-select-options button.resource-select-group {
+  color: #9eaaba;
+  font-weight: 600;
+}
+
+.resource-select-options button.resource-select-group:hover {
+  color: #e4eaf1;
+}
+
+.resource-select-group-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.resource-select-group-name > svg {
+  flex: none;
+}
+
+.resource-select-group-name > svg:nth-child(2) {
+  color: #d7ae54;
+}
+
+.resource-select-option-name {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.resource-select-option-name small {
+  overflow: hidden;
+  color: #768395;
+  font-size: 9px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-select-options button.selected .resource-select-option-name small {
+  color: #a9c9e6;
+}
+
+.resource-select-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: #2b3542;
 }
 
 .resource-select-options button.missing span,

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  ClipboardPaste,
   Grid3X3,
   Image as ImageIcon,
   Layers3,
   Pencil,
+  Save as SaveIcon,
   Upload,
   type LucideIcon
 } from 'lucide-react'
@@ -171,7 +173,9 @@ export function BackgroundPanel({
   )
   const [saved, setSaved] = useState(() => (source ? JSON.stringify(source) : ''))
   const [saving, setSaving] = useState(false)
+  const [imageSaving, setImageSaving] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [pasting, setPasting] = useState(false)
   const imageVersion = useApp((state) => state.imageVersion)
   const updateBackground = useApp((state) => state.updateBackground)
   const refreshImages = useApp((state) => state.refreshImages)
@@ -232,6 +236,38 @@ export function BackgroundPanel({
     }
   }
 
+  async function pasteImage(): Promise<void> {
+    if (pasting) return
+    setPasting(true)
+    try {
+      const file = await window.openGms.pasteBackgroundImage(params.item.file)
+      if (!file) {
+        addLog('Could not paste background image: the clipboard does not contain an image.')
+        return
+      }
+      patch({ ...file, missing: false })
+      refreshImages()
+      addLog(`Pasted clipboard image into background ${params.item.name}.`)
+    } catch (error) {
+      addLog(`Could not paste image into background ${params.item.name}: ${error instanceof Error ? error.message : 'Operation failed'}`)
+    } finally {
+      setPasting(false)
+    }
+  }
+
+  async function saveImage(): Promise<void> {
+    if (imageSaving || !data.image || data.missing) return
+    setImageSaving(true)
+    try {
+      const path = await window.openGms.saveBackgroundImage(params.item.name, data.image)
+      if (path) addLog(`Saved background image to ${path}.`)
+    } catch (error) {
+      addLog(`Could not save image for background ${params.item.name}: ${error instanceof Error ? error.message : 'Operation failed'}`)
+    } finally {
+      setImageSaving(false)
+    }
+  }
+
   async function save(): Promise<void> {
     if (!background || !dirty || saving) return
     const next = copyBackground(background)
@@ -270,8 +306,14 @@ export function BackgroundPanel({
               <input value={data.data || 'No image'} readOnly />
             </label>
             <div className="background-actions">
-              <button className="sprite-wide-button" onClick={() => void loadImage()} disabled={loading}>
-                <Upload size={15} /> {loading ? 'Loading…' : 'Load Background'}
+              <button className="sprite-wide-button" onClick={() => void loadImage()} disabled={loading || pasting}>
+                <Upload size={15} /> {loading ? 'Loading…' : 'Load'}
+              </button>
+              <button className="sprite-wide-button" onClick={() => void saveImage()} disabled={imageSaving || !data.image || data.missing}>
+                <SaveIcon size={15} /> {imageSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button className="sprite-wide-button" onClick={() => void pasteImage()} disabled={pasting || loading}>
+                <ClipboardPaste size={15} /> {pasting ? 'Pasting…' : 'Paste'}
               </button>
               <button className="sprite-wide-button" onClick={openImage} disabled={!data.image || data.missing}>
                 <Pencil size={15} /> Edit Background

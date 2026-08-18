@@ -516,14 +516,18 @@ export function ActionEditor({
         ) : (
           <div className="action-editor-form">
             {(action.canApply || info?.canApply) && (
-              <label className="object-field">
+              <div className="object-field">
                 <span>Apply To</span>
-                <select value={action.appliesTo} onChange={(event) => onChange({ ...action, appliesTo: event.target.value })}>
-                  <option value="self">Self</option>
-                  <option value="other">Other</option>
-                  {items(project, 'object').map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
-                </select>
-              </label>
+                <ResourceSelect
+                  value={action.appliesTo}
+                  options={items(project, 'object')}
+                  project={project}
+                  fixedOptions={[{ value: 'self', label: 'Self' }, { value: 'other', label: 'Other' }]}
+                  allowEmpty={false}
+                  placeholder="Search objects"
+                  onChange={(appliesTo) => onChange({ ...action, appliesTo })}
+                />
+              </div>
             )}
             <div className="action-flags">
               {(action.canRelative || info?.canRelative) && (
@@ -546,6 +550,7 @@ export function ActionEditor({
                       <ResourceSelect
                         value={arg.value}
                         options={resourceItems}
+                        project={project}
                         placeholder={`Search ${resourceType}s`}
                         onChange={(value) => onChange(setArg(action, index, value))}
                       />
@@ -885,7 +890,7 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
           <section className="object-card object-identity">
             <label className="object-field"><span>Name</span><ResourceName item={params.item} /></label>
             <div className="object-field"><span>Sprite</span>
-              <ResourceSelect value={data.sprite} options={spriteItems} placeholder="Search sprites" onChange={(sprite) => patch({ sprite })} />
+              <ResourceSelect value={data.sprite} options={spriteItems} project={project} placeholder="Search sprites" onChange={(sprite) => patch({ sprite })} />
             </div>
             <div className="object-sprite-preview">
               {sprite?.image ? <img src={assetUrl(sprite.image, params.projectPath, imageVersion)} alt="" /> : <ImageIcon size={25} />}
@@ -910,12 +915,13 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
               <ResourceSelect
                 value={data.parent}
                 options={objectItems.filter((item) => item.id !== params.item.id)}
+                project={project}
                 placeholder="Search objects"
                 onChange={(parent) => patch({ parent })}
               />
             </div>
             <div className="object-field"><span>Mask</span>
-              <ResourceSelect value={data.mask} options={spriteItems} emptyLabel="Same as sprite" placeholder="Search sprites" onChange={(mask) => patch({ mask })} />
+              <ResourceSelect value={data.mask} options={spriteItems} project={project} emptyLabel="Same as sprite" placeholder="Search sprites" onChange={(mask) => patch({ mask })} />
             </div>
           </section>
 
