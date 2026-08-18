@@ -13,6 +13,7 @@ import {
   Layers3,
   Map,
   Plus,
+  RefreshCw,
   Settings2,
   SquarePen,
   Trash2,
@@ -32,6 +33,7 @@ import type {
 } from '../../../shared/types'
 import { assetUrl } from '../assets'
 import { CodeEditor } from '../CodeEditor'
+import { ColorPicker } from '../ColorPicker'
 import { requestCodeReveal } from '../codeReveal'
 import {
   listenSearchReveal,
@@ -60,6 +62,10 @@ const pages: Array<{ id: RoomPage; name: string; icon: LucideIcon }> = [
   { id: 'settings', name: 'Settings', icon: Settings2 },
   { id: 'tiles', name: 'Tiles', icon: Grid3X3 }
 ]
+
+const tilePreviewScale = 1
+const roomSidebarMin = 284
+const roomSidebarMax = 560
 
 function copyRoom(room: RoomData): RoomData {
   return {
@@ -255,6 +261,61 @@ function OrderDialog({
   )
 }
 
+function TileLayerDialog({
+  kind,
+  initial,
+  onApply,
+  onClose
+}: {
+  kind: 'add' | 'change'
+  initial: number
+  onApply: (depth: number) => string | undefined
+  onClose: () => void
+}): React.JSX.Element {
+  const [value, setValue] = useState(String(initial))
+  const [error, setError] = useState('')
+  const title = kind === 'add' ? 'Adding a Tile Layer' : 'Changing a Tile Layer'
+
+  useEffect(() => {
+    function close(event: KeyboardEvent): void {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [onClose])
+
+  function submit(event: React.FormEvent): void {
+    event.preventDefault()
+    const depth = Number(value)
+    if (!Number.isSafeInteger(depth) || depth < -0x80000000 || depth > 0x7fffffff) {
+      setError('Enter a whole number between -2147483648 and 2147483647.')
+      return
+    }
+    const message = onApply(depth)
+    if (message) setError(message)
+    else onClose()
+  }
+
+  return (
+    <div className="object-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <form className="timeline-dialog room-layer-dialog" role="dialog" aria-modal="true" aria-label={title} onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
+        <header><strong>{title}</strong><button type="button" onClick={onClose} title="Close"><X size={16} /></button></header>
+        <div className="timeline-dialog-fields">
+          <label>
+            <span>{kind === 'add' ? 'Indicate the depth' : 'Indicate new depth'}</span>
+            <input autoFocus type="number" value={value} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setValue(event.target.value)} />
+          </label>
+          {error && <span className="timeline-dialog-error">{error}</span>}
+        </div>
+        <footer>
+          <button type="button" onClick={onClose}><X size={14} /> Cancel</button>
+          <button className="primary" type="submit"><Check size={14} /> OK</button>
+        </footer>
+      </form>
+    </div>
+  )
+}
+
 export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): React.JSX.Element {
   const project = useApp((state) => state.project)
   const imageVersion = useApp((state) => state.imageVersion)
@@ -267,22 +328,29 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
   const [saving, setSaving] = useState(false)
   const [page, setPage] = useState<RoomPage>('objects')
   const [showGrid, setShowGrid] = useState(true)
+  const [sidebarWidth, setSidebarWidth] = useState(roomSidebarMin)
+  const [sidebarResizing, setSidebarResizing] = useState(false)
   const [backgroundIndex, setBackgroundIndex] = useState(0)
   const [viewIndex, setViewIndex] = useState(0)
   const [selectedInstance, setSelectedInstance] = useState('')
   const [objectName, setObjectName] = useState('')
   const [tileBackground, setTileBackground] = useState('')
   const [tileSource, setTileSource] = useState({ x: 0, y: 0 })
-  const [tileDepth, setTileDepth] = useState(1000000)
-  const [deleteObjects, setDeleteObjects] = useState(false)
-  const [deleteTiles, setDeleteTiles] = useState(false)
+  const [tilePan, setTilePan] = useState({ x: 0, y: 0 })
+  const [tilePanning, setTilePanning] = useState(false)
+  const [tileDepth, setTileDepth] = useState(() => params.item.room?.tiles[0]?.depth ?? 1000000)
+  const [deleteObjects, setDeleteObjects] = useState(true)
+  const [deleteTiles, setDeleteTiles] = useState(true)
   const [hideOtherLayers, setHideOtherLayers] = useState(false)
   const [place, setPlace] = useState({ scaleX: 1, scaleY: 1, rotation: 0, color: 0xffffffff })
   const [codeOpen, setCodeOpen] = useState(false)
   const [instanceCode, setInstanceCode] = useState('')
   const [orderOpen, setOrderOpen] = useState(false)
+  const [tileLayerDialog, setTileLayerDialog] = useState<'add' | 'change' | null>(null)
   const editVersion = useRef(0)
   const searchTarget = useRef<CodeSearchResult | null>(null)
+  const tilePanDrag = useRef<{ pointer: number; x: number; y: number; panX: number; panY: number } | null>(null)
+  const sidebarDrag = useRef<{ pointer: number; x: number; width: number } | null>(null)
   useSave(api.id, dirty, save)
   const objectItems = useMemo(() => items(project, 'object'), [project])
   const backgroundItems = useMemo(() => items(project, 'background'), [project])
@@ -299,6 +367,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
       if (!active) return
       const next = copyRoom(value)
       setRoom(next)
+      setTileDepth(next.tiles[0]?.depth ?? 1000000)
       updateRoom(params.item.id, copyRoom(next))
       setLoading(false)
     }).catch((error: unknown) => {
@@ -316,8 +385,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
       const first = room.tiles[0]?.background || backgroundItems.find((item) => item.background?.tileSet)?.name || backgroundItems[0]?.name || ''
       setTileBackground(first)
     }
-    if (room.tiles.length && !room.tiles.some((tile) => tile.depth === tileDepth)) setTileDepth(room.tiles[0].depth)
-  }, [backgroundItems, objectItems, objectName, room, tileBackground, tileDepth])
+  }, [backgroundItems, objectItems, objectName, room, tileBackground])
 
   useEffect(() => {
     function selectObject(event: Event): void {
@@ -505,6 +573,109 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
     patch({ tiles: data.tiles.filter((item) => item.id !== id) })
   }
 
+  function changeTileDepth(depth: number): void {
+    if (depth === tileDepth) return
+    if (data.tiles.some((tile) => tile.depth === tileDepth)) {
+      patch({ tiles: data.tiles.map((tile) => tile.depth === tileDepth ? { ...tile, depth } : tile) })
+    }
+    setTileDepth(depth)
+  }
+
+  function applyTileDepth(kind: 'add' | 'change', depth: number): string | undefined {
+    if (kind === 'change' && depth === tileDepth) return undefined
+    if (tileLayers.includes(depth)) return `Layer ${depth} already exists.`
+    if (kind === 'change') changeTileDepth(depth)
+    else setTileDepth(depth)
+    return undefined
+  }
+
+  function deleteTileLayer(): void {
+    const tiles = data.tiles.filter((tile) => tile.depth !== tileDepth)
+    if (tiles.length !== data.tiles.length) patch({ tiles })
+    const depths = [...new Set(tiles.map((tile) => tile.depth))].sort((left, right) => right - left)
+    setTileDepth(depths[0] ?? 1000000)
+  }
+
+  function limitTilePan(x: number, y: number, viewport: HTMLDivElement): { x: number; y: number } {
+    if (!tileData) return { x: 0, y: 0 }
+    return {
+      x: Math.min(0, Math.max(viewport.clientWidth - tileData.width * tilePreviewScale, x)),
+      y: Math.min(0, Math.max(viewport.clientHeight - tileData.height * tilePreviewScale, y))
+    }
+  }
+
+  function startTilePan(event: React.PointerEvent<HTMLDivElement>): void {
+    if (event.button !== 1 || !tileData) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    tilePanDrag.current = {
+      pointer: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      panX: tilePan.x,
+      panY: tilePan.y
+    }
+    setTilePanning(true)
+  }
+
+  function moveTilePan(event: React.PointerEvent<HTMLDivElement>): void {
+    const drag = tilePanDrag.current
+    if (!drag || drag.pointer !== event.pointerId) return
+    event.preventDefault()
+    setTilePan(limitTilePan(
+      drag.panX + event.clientX - drag.x,
+      drag.panY + event.clientY - drag.y,
+      event.currentTarget
+    ))
+  }
+
+  function finishTilePan(event: React.PointerEvent<HTMLDivElement>): void {
+    const drag = tilePanDrag.current
+    if (!drag || drag.pointer !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    tilePanDrag.current = null
+    setTilePanning(false)
+  }
+
+  function limitSidebarWidth(width: number, body: HTMLElement): number {
+    const available = Math.max(roomSidebarMin, body.clientWidth - 320)
+    return Math.max(roomSidebarMin, Math.min(roomSidebarMax, available, width))
+  }
+
+  function startSidebarResize(event: React.PointerEvent<HTMLDivElement>): void {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    sidebarDrag.current = { pointer: event.pointerId, x: event.clientX, width: sidebarWidth }
+    setSidebarResizing(true)
+  }
+
+  function moveSidebarResize(event: React.PointerEvent<HTMLDivElement>): void {
+    const drag = sidebarDrag.current
+    const body = event.currentTarget.parentElement
+    if (!drag || drag.pointer !== event.pointerId || !body) return
+    event.preventDefault()
+    setSidebarWidth(limitSidebarWidth(drag.width + event.clientX - drag.x, body))
+  }
+
+  function finishSidebarResize(event: React.PointerEvent<HTMLDivElement>): void {
+    const drag = sidebarDrag.current
+    if (!drag || drag.pointer !== event.pointerId) return
+    sidebarDrag.current = null
+    setSidebarResizing(false)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
+  function resizeSidebarWithKey(event: React.KeyboardEvent<HTMLDivElement>): void {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home') return
+    const body = event.currentTarget.parentElement
+    if (!body) return
+    event.preventDefault()
+    setSidebarWidth((width) => event.key === 'Home'
+      ? roomSidebarMin
+      : limitSidebarWidth(width + (event.key === 'ArrowLeft' ? -16 : 16), body))
+  }
+
   function pickTile(event: React.MouseEvent<HTMLDivElement>): void {
     if (!tileData) return
     const image = event.currentTarget.querySelector<HTMLElement>('.room-tile-image')
@@ -528,7 +699,8 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
       <>
         <Group title="Room">
           <label className="room-text-field"><span>Name</span><ResourceName item={params.item} /></label>
-          <div className="room-field-grid"><Field label="Width" value={data.width} min={1} onChange={(width) => patch({ width })} /><Field label="Height" value={data.height} min={1} onChange={(height) => patch({ height })} /></div>
+          <Field label="Width" value={data.width} min={1} onChange={(width) => patch({ width })} />
+          <Field label="Height" value={data.height} min={1} onChange={(height) => patch({ height })} />
           <Field label="Speed" value={data.speed} min={1} onChange={(speed) => patch({ speed })} />
           <CheckField label="Persistent" checked={data.persistent} onChange={(persistent) => patch({ persistent })} />
           <CheckField label="Clear display buffer with window colour" checked={data.clearDisplayBuffer} onChange={(clearDisplayBuffer) => patch({ clearDisplayBuffer })} />
@@ -537,7 +709,6 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
           <button className="room-wide-button" onClick={() => setCodeOpen(true)}><Braces size={15} /> Creation Code</button>
           <button className="room-wide-button" onClick={() => setOrderOpen(true)}><Layers3 size={15} /> Instance Order</button>
         </Group>
-        <div className="room-stats"><span><strong>{data.instances.length}</strong>Instances</span><span><strong>{data.tiles.length}</strong>Tiles</span></div>
       </>
     )
   }
@@ -550,26 +721,44 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
     const height = tileData ? tileHeight / Math.max(1, tileData.height) * 100 : 0
     return (
       <>
-        <Group title="Tile sheet">
-          <div className="room-tile-preview" onClick={pickTile}>
+        <Group title="Tile set">
+          <div
+            className={`room-tile-preview${tilePanning ? ' panning' : ''}`}
+            onClick={pickTile}
+            onPointerDown={startTilePan}
+            onPointerMove={moveTilePan}
+            onPointerUp={finishTilePan}
+            onPointerCancel={finishTilePan}
+            onAuxClick={(event) => event.preventDefault()}
+          >
             {image ? (
-              <div className="room-tile-image">
-                <img src={image} alt="" />
-                <span className="room-tile-selection" style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }} />
-              </div>
-            ) : <div className="room-preview-empty"><Grid3X3 size={24} /><span>No tile sheet</span></div>}
+              <>
+                <div
+                  className="room-tile-image"
+                  style={{
+                    width: tileData!.width * tilePreviewScale,
+                    height: tileData!.height * tilePreviewScale,
+                    transform: `translate3d(${tilePan.x}px, ${tilePan.y}px, 0)`
+                  }}
+                >
+                  <img src={image} alt="" draggable={false} />
+                  <span className="room-tile-selection" style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }} />
+                </div>
+                <span className="room-tile-scale">100%</span>
+              </>
+            ) : <div className="room-preview-empty"><Grid3X3 size={24} /><span>No tile set</span></div>}
           </div>
-          <ResourceSelect value={tileBackground} options={backgroundItems} project={project} placeholder="Search backgrounds" onChange={(value) => { setTileBackground(value); setTileSource({ x: 0, y: 0 }) }} />
+          <ResourceSelect value={tileBackground} options={backgroundItems} project={project} placeholder="Search backgrounds" onChange={(value) => { setTileBackground(value); setTileSource({ x: 0, y: 0 }); setTilePan({ x: 0, y: 0 }) }} />
           <div className="room-field-grid"><Field label="X" value={tileSource.x} min={0} onChange={(x) => setTileSource((value) => ({ ...value, x }))} /><Field label="Y" value={tileSource.y} min={0} onChange={(y) => setTileSource((value) => ({ ...value, y }))} /></div>
           <CheckField label="Delete underlying" checked={deleteTiles} onChange={setDeleteTiles} />
         </Group>
         <Group title="Tile layer">
-          <label className="room-text-field"><span>Current layer</span><select value={tileDepth} onChange={(event) => setTileDepth(Number(event.target.value))}>{tileLayers.map((depth) => <option key={depth} value={depth}>Layer {depth}</option>)}</select></label>
-          <Field label="Depth" value={tileDepth} onChange={setTileDepth} />
+          <label className="room-layer-select"><span>Current Tile Layer</span><select value={tileDepth} onChange={(event) => setTileDepth(Number(event.target.value))}>{tileLayers.map((depth) => <option key={depth} value={depth}>Layer {depth}</option>)}</select></label>
           <CheckField label="Hide other layers" checked={hideOtherLayers} onChange={setHideOtherLayers} />
-          <div className="room-button-row">
-            <button onClick={() => setTileDepth(Math.min(...tileLayers) - 100)}><Plus size={14} /> Add</button>
-            <button className="danger" onClick={() => patch({ tiles: data.tiles.filter((tile) => tile.depth !== tileDepth) })} disabled={!data.tiles.some((tile) => tile.depth === tileDepth)}><Trash2 size={14} /> Delete</button>
+          <div className="room-button-row room-layer-buttons">
+            <button onClick={() => setTileLayerDialog('add')}><Plus size={14} /> Add</button>
+            <button className="danger" onClick={deleteTileLayer} disabled={tileLayers.length === 1 && !data.tiles.some((tile) => tile.depth === tileDepth)}><Trash2 size={14} /> Delete</button>
+            <button onClick={() => setTileLayerDialog('change')}><RefreshCw size={14} /> Change</button>
           </div>
         </Group>
         <p className="room-help">Left click places a tile. Right click deletes one. Hold Alt to place without snapping.</p>
@@ -582,7 +771,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
       <>
         <Group title="Room colour">
           <CheckField label="Draw background colour" checked={data.showColor} onChange={(showColor) => patch({ showColor })} />
-          <label className="room-color-field"><span>Colour</span><input type="color" value={hexColor(data.color)} onChange={(event) => patch({ color: roomColor(event.target.value) })} /></label>
+          <div className="room-color-field"><span>Colour</span><ColorPicker value={hexColor(data.color)} onChange={(color) => patch({ color: roomColor(color) })} /></div>
         </Group>
         <Group title="Background layers">
           <div className="room-slot-list">{data.backgrounds.map((item, index) => <button key={index} className={index === backgroundIndex ? 'selected' : ''} onClick={() => setBackgroundIndex(index)}><span>Background {index}</span><small>{item.name || 'None'}</small></button>)}</div>
@@ -649,7 +838,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
           <div className="room-field-grid"><Field label="X" value={selected?.x ?? 0} disabled={!selected} onChange={(x) => selected && patchInstance(selected.name, { x })} /><Field label="Y" value={selected?.y ?? 0} disabled={!selected} onChange={(y) => selected && patchInstance(selected.name, { y })} /></div>
           <Field label="Rotation" value={currentTransform.rotation} onChange={(rotation) => patchTransform({ rotation })} />
           <div className="room-field-grid"><Field label="Scale X" value={currentTransform.scaleX} step={0.1} onChange={(scaleX) => patchTransform({ scaleX })} /><Field label="Scale Y" value={currentTransform.scaleY} step={0.1} onChange={(scaleY) => patchTransform({ scaleY })} /></div>
-          <div className="room-color-row"><label className="room-color-field"><span>Colour</span><input type="color" value={hexColor(currentTransform.color)} onChange={(event) => patchTransform({ color: roomColor(event.target.value, currentAlpha) })} /></label><Field label="Alpha" value={currentAlpha} min={0} max={255} onChange={(alpha) => patchTransform({ color: roomColor(hexColor(currentTransform.color), Math.max(0, Math.min(255, alpha))) })} /></div>
+          <div className="room-color-row"><div className="room-color-field"><span>Colour</span><ColorPicker value={hexColor(currentTransform.color)} onChange={(color) => patchTransform({ color: roomColor(color, currentAlpha) })} /></div><Field label="Alpha" value={currentAlpha} min={0} max={255} onChange={(alpha) => patchTransform({ color: roomColor(hexColor(currentTransform.color), Math.max(0, Math.min(255, alpha))) })} /></div>
           <div className="room-button-row"><button onClick={() => patchTransform({ scaleX: -currentTransform.scaleX })}>Flip X</button><button onClick={() => patchTransform({ scaleY: -currentTransform.scaleY })}>Flip Y</button></div>
           {selected && <div className="room-button-row"><button onClick={editObject} disabled={!selectedObjectItem}><SquarePen size={14} /> Edit Object</button><button onClick={() => setInstanceCode(selected.name)}><Braces size={14} /> Creation Code</button></div>}
           {selected && <button className="room-wide-button danger" onClick={() => deleteInstance(selected.name)}><Trash2 size={14} /> Delete selected</button>}
@@ -683,11 +872,31 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
         </div>
         <EditorOk api={api} />
       </header>
-      <div className="room-editor-body">
+      <div
+        className={`room-editor-body${sidebarResizing ? ' resizing' : ''}`}
+        style={{ gridTemplateColumns: `${sidebarWidth}px 5px minmax(0, 1fr)` }}
+      >
         <aside className="room-sidebar">
           <nav>{pages.map(({ id, name, icon: Icon }) => <button key={id} className={page === id ? 'active' : ''} onClick={() => setPage(id)}><Icon size={15} /><span>{name}</span></button>)}</nav>
           <div className="room-sidebar-content">{content[page]()}</div>
         </aside>
+        <div
+          className="room-sidebar-resizer"
+          role="separator"
+          aria-label="Resize room sidebar"
+          aria-orientation="vertical"
+          aria-valuemin={roomSidebarMin}
+          aria-valuemax={roomSidebarMax}
+          aria-valuenow={sidebarWidth}
+          tabIndex={0}
+          onDoubleClick={() => setSidebarWidth(roomSidebarMin)}
+          onKeyDown={resizeSidebarWithKey}
+          onPointerDown={startSidebarResize}
+          onPointerMove={moveSidebarResize}
+          onPointerUp={finishSidebarResize}
+          onPointerCancel={finishSidebarResize}
+          onLostPointerCapture={() => { sidebarDrag.current = null; setSidebarResizing(false) }}
+        />
         <RoomCanvas
           room={data}
           project={project}
@@ -720,6 +929,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
       {codeOpen && <CodeDialog id={`${params.item.id}/creation-code`} title={`${params.item.name} · Creation Code`} subtitle="Room creation code" value={data.code} onChange={(code) => patch({ code })} onClose={() => setCodeOpen(false)} />}
       {codeInstance && <CodeDialog id={`${params.item.id}/instance/${codeInstance.name}`} title={`${codeInstance.object} · ${codeInstance.name}`} subtitle="Instance creation code" value={codeInstance.code} onChange={(code) => patchInstance(codeInstance.name, { code })} onClose={() => setInstanceCode('')} />}
       {orderOpen && <OrderDialog instances={data.instances} onChange={(instances) => patch({ instances })} onClose={() => setOrderOpen(false)} />}
+      {tileLayerDialog && <TileLayerDialog kind={tileLayerDialog} initial={tileLayerDialog === 'add' ? Math.min(...tileLayers) - 100 : tileDepth} onApply={(depth) => applyTileDepth(tileLayerDialog, depth)} onClose={() => setTileLayerDialog(null)} />}
     </section>
   )
 }

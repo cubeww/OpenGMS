@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Braces, Palette, RotateCcw, Settings2, Type } from 'lucide-react'
 import type { IDockviewPanelProps } from 'dockview-react'
+import { ColorPicker } from '../ColorPicker'
 import {
   codeFontFamily,
   resetEditorSettings,
@@ -75,43 +76,11 @@ function ColorField({
   value: string
   onChange: (value: string) => void
 }): React.JSX.Element {
-  const [text, setText] = useState(value)
-
-  useEffect(() => setText(value), [value])
-
-  function commit(): void {
-    const next = text.trim().toUpperCase()
-    if (!/^#[0-9A-F]{6}$/.test(next)) {
-      setText(value)
-      return
-    }
-    setText(next)
-    onChange(next)
-  }
-
   return (
-    <label className="preferences-color">
+    <div className="preferences-color">
       <span>{label}</span>
-      <div>
-        <input
-          type="color"
-          value={value}
-          aria-label={`${label} color`}
-          onChange={(event) => onChange(event.target.value.toUpperCase())}
-        />
-        <input
-          type="text"
-          value={text}
-          maxLength={7}
-          spellCheck={false}
-          onChange={(event) => setText(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') event.currentTarget.blur()
-          }}
-        />
-      </div>
-    </label>
+      <ColorPicker value={value} onChange={onChange} label={`${label} color`} />
+    </div>
   )
 }
 
@@ -240,9 +209,9 @@ export function PreferencesPanel({ api }: IDockviewPanelProps): React.JSX.Elemen
                 <span style={{ color: settings.colors.keyword }}>var</span>{' speed '}<span style={{ color: settings.colors.operator }}>=</span>{' '}<span style={{ color: settings.colors.number }}>4</span>;{'\n'}
                 <span style={{ color: settings.colors.variable }}>x</span>{' '}<span style={{ color: settings.colors.operator }}>+=</span>{' '}<span style={{ color: settings.colors.builtInFunction }}>lengthdir_x</span>(speed, <span style={{ color: settings.colors.variable }}>direction</span>);{'\n'}
                 {'state '}<span style={{ color: settings.colors.operator }}>=</span>{' '}<span style={{ color: settings.colors.enumName }}>PlayerState</span>.<span style={{ color: settings.colors.enumMember }}>Move</span>;{'\n'}
-                <span style={{ color: settings.colors.builtInFunction }}>instance_create</span>(<span style={{ color: settings.colors.variable }}>x</span>, y, <span style={{ color: settings.colors.resource }}>objPlayer</span>);{'\n'}
+                <span style={{ color: settings.colors.builtInFunction }}>instance_create</span>(<span style={{ color: settings.colors.variable }}>x</span>, <span style={{ color: settings.colors.variable }}>y</span>, <span style={{ color: settings.colors.resource }}>objPlayer</span>);{'\n'}
                 <span style={{ color: settings.colors.builtInFunction }}>draw_set_color</span>(<span style={{ color: settings.colors.constant }}>c_white</span>);{'\n'}
-                <span style={{ color: settings.colors.function }}>move_player</span>(<span style={{ color: settings.colors.variable }}>x</span>, y, <span style={{ color: settings.colors.constant }}>true</span>);{' '}<span style={{ color: settings.colors.comment, fontStyle: 'italic' }}>// Update position</span>{'\n'}
+                <span style={{ color: settings.colors.function }}>move_player</span>(<span style={{ color: settings.colors.variable }}>x</span>, <span style={{ color: settings.colors.variable }}>y</span>, <span style={{ color: settings.colors.constant }}>true</span>);{' '}<span style={{ color: settings.colors.comment, fontStyle: 'italic' }}>// Update position</span>{'\n'}
                 <span style={{ color: settings.colors.builtInFunction }}>show_debug_message</span>(<span style={{ color: settings.colors.string }}>&quot;Ready&quot;</span>);
               </code></pre>
           </section>

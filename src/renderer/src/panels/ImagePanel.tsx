@@ -12,6 +12,7 @@ import {
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { SpriteFrame } from '../../../shared/types'
 import { assetUrl } from '../assets'
+import { ColorPicker } from '../ColorPicker'
 import { EditorOk } from '../EditorOk'
 import { useSave } from '../save'
 import { useApp } from '../store'
@@ -367,14 +368,13 @@ export function ImagePanel({ params, api }: IDockviewPanelProps<ImageParams>): R
           <section>
             <h3><Droplets size={14} /> Color</h3>
             <div className="paint-color-row">
-              <input type="color" value={color} onChange={(event) => setColor(event.target.value)} />
-              <code>{color.toUpperCase()}</code>
+              <ColorPicker value={color} onChange={setColor} label="Paint color" />
             </div>
             <div className="paint-palette">
               {palette.map((value) => (
                 <button
                   key={value}
-                  className={color === value ? 'active' : ''}
+                  className={color.toLowerCase() === value ? 'active' : ''}
                   style={{ background: value }}
                   title={value}
                   onClick={() => setColor(value)}

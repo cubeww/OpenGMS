@@ -26,6 +26,7 @@ import type {
   WindowsSettings
 } from '../../../shared/types'
 import { assetUrl } from '../assets'
+import { ColorPicker } from '../ColorPicker'
 import { EditorOk } from '../EditorOk'
 import { useSave } from '../save'
 import { useApp } from '../store'
@@ -254,10 +255,7 @@ function GeneralPage({
       </Card>
 
       <Card title="Room Exterior" detail="Color shown outside the current room region">
-        <label className="global-color-field">
-          <input type="color" value={data.general.windowColor} onChange={(event) => patch({ windowColor: event.target.value })} />
-          <span>{data.general.windowColor.toUpperCase()}</span>
-        </label>
+        <div className="global-color-field"><ColorPicker value={data.general.windowColor} onChange={(windowColor) => patch({ windowColor })} label="Room exterior color" /></div>
       </Card>
     </div>
   )

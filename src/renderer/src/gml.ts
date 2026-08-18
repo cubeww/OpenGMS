@@ -679,8 +679,7 @@ function resourceTargets(model: Monaco.editor.ITextModel): GmlResourceTarget[] {
       const name = line.slice(start, index)
       const symbol = symbols.get(name)
       const before = line.slice(0, start).trimEnd().at(-1)
-      const after = line.slice(index).trimStart()[0]
-      if (!symbol || shadowed.has(name) || before === '.' || after === '.') continue
+      if (!symbol || shadowed.has(name) || before === '.') continue
 
       targets.push({
         name,

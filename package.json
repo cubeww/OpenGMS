@@ -1,6 +1,6 @@
 {
   "name": "opengms",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "A modern GameMaker Studio 1.4 project editor",
   "author": "Cube",
   "private": true,
