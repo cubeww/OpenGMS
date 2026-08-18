@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
   AlarmClock,
   ArrowDown,
@@ -159,6 +159,7 @@ const commonKeys: Array<[number, string]> = [
 ]
 
 let actionRequest: Promise<ActionLibrary[]> | null = null
+const actionDragType = 'application/x-opengms-action'
 
 export function loadActions(): Promise<ActionLibrary[]> {
   if (!actionRequest) {
@@ -608,6 +609,8 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
   const [libraries, setLibraries] = useState<ActionLibrary[]>([])
   const [library, setLibrary] = useState('')
   const [libraryError, setLibraryError] = useState('')
+  const [draggedAction, setDraggedAction] = useState('')
+  const [dropActionPos, setDropActionPos] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const imageVersion = useApp((state) => state.imageVersion)
   const updateObject = useApp((state) => state.updateObject)
@@ -785,13 +788,62 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
     setEditing(true)
   }
 
-  function addAction(info: ActionInfo): void {
+  function addAction(info: ActionInfo, position?: number): void {
     if (!selectedEvent) return
     const action = makeAction(info)
-    const index = selectedEvent.actions.length
-    changeEvent(eventPos, { ...selectedEvent, actions: [...selectedEvent.actions, action] })
+    const index = Math.max(0, Math.min(position ?? selectedEvent.actions.length, selectedEvent.actions.length))
+    const actions = [...selectedEvent.actions]
+    actions.splice(index, 0, action)
+    changeEvent(eventPos, { ...selectedEvent, actions })
     setActionPos(index)
     setEditing(info.args.length > 0 || info.interfaceKind === 5)
+  }
+
+  function actionDropIndex(event: React.DragEvent<HTMLDivElement>): number {
+    const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>(':scope > button')
+    for (let index = 0; index < buttons.length; index += 1) {
+      const bounds = buttons[index].getBoundingClientRect()
+      if (event.clientY < bounds.top + bounds.height / 2) return index
+    }
+    return buttons.length
+  }
+
+  function startLibraryDrag(event: React.DragEvent<HTMLButtonElement>, info: ActionInfo): void {
+    if (!selectedEvent) {
+      event.preventDefault()
+      return
+    }
+    const key = actionKey(info)
+    event.dataTransfer.effectAllowed = 'copy'
+    event.dataTransfer.setData(actionDragType, key)
+    event.dataTransfer.setData('text/plain', info.description || info.name)
+    setDraggedAction(key)
+    setDropActionPos(null)
+  }
+
+  function dragOverActions(event: React.DragEvent<HTMLDivElement>): void {
+    if (!selectedEvent || !draggedAction) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    const index = actionDropIndex(event)
+    setDropActionPos((current) => current === index ? current : index)
+  }
+
+  function leaveActions(event: React.DragEvent<HTMLDivElement>): void {
+    const next = event.relatedTarget
+    if (!(next instanceof Node) || !event.currentTarget.contains(next)) setDropActionPos(null)
+  }
+
+  function dropAction(event: React.DragEvent<HTMLDivElement>): void {
+    if (!selectedEvent) return
+    const key = event.dataTransfer.getData(actionDragType) || draggedAction
+    const info = actionMap.get(key)
+    if (!info) return
+    event.preventDefault()
+    const index = actionDropIndex(event)
+    setDropActionPos(null)
+    setDraggedAction('')
+    addAction(info, index)
   }
 
   function deleteAction(): void {
@@ -910,19 +962,32 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
               <button onClick={deleteAction} disabled={!selectedAction} title="Delete action"><Trash2 size={14} /></button>
             </div>
           </header>
-          <div className="object-action-list">
+          <div
+            className={`object-action-list ${dropActionPos !== null ? 'drag-over' : ''}`}
+            onDragOver={dragOverActions}
+            onDragLeave={leaveActions}
+            onDrop={dropAction}
+          >
             {selectedEvent?.actions.map((action, index) => {
               const info = actionMap.get(actionKey(action))
               return (
-                <button key={`${actionKey(action)}:${index}`} className={index === actionPos ? 'selected' : ''} onClick={() => setActionPos(index)} onDoubleClick={() => { setActionPos(index); setEditing(true) }}>
-                  <span className="object-action-number">{index + 1}</span>
-                  <span className="object-action-icon">{info?.icon ? <img src={info.icon} alt="" /> : <Braces size={17} />}</span>
-                  <span className="object-action-text"><strong>{info?.name || (action.kind === 7 ? 'Execute Code' : `Action ${action.id}`)}</strong><small>{actionSummary(action, info)}</small></span>
-                </button>
+                <Fragment key={`${actionKey(action)}:${index}`}>
+                  {dropActionPos === index && <div className="object-action-drop-line" />}
+                  <button className={index === actionPos ? 'selected' : ''} onClick={() => setActionPos(index)} onDoubleClick={() => { setActionPos(index); setEditing(true) }}>
+                    <span className="object-action-number">{index + 1}</span>
+                    <span className="object-action-icon">{info?.icon ? <img src={info.icon} alt="" /> : <Braces size={17} />}</span>
+                    <span className="object-action-text"><strong>{info?.name || (action.kind === 7 ? 'Execute Code' : `Action ${action.id}`)}</strong><small>{actionSummary(action, info)}</small></span>
+                  </button>
+                </Fragment>
               )
             })}
+            {selectedEvent && dropActionPos === selectedEvent.actions.length && (
+              <div className={`object-action-drop-line ${selectedEvent.actions.length === 0 ? 'empty' : ''}`}>
+                {selectedEvent.actions.length === 0 && 'Drop action here'}
+              </div>
+            )}
             {!selectedEvent && <div className="object-list-empty"><Zap size={24} /><span>Select an event to edit its actions</span></div>}
-            {selectedEvent && selectedEvent.actions.length === 0 && <div className="object-list-empty"><Braces size={24} /><span>Choose an action from the library</span></div>}
+            {selectedEvent && selectedEvent.actions.length === 0 && dropActionPos === null && <div className="object-list-empty"><Braces size={24} /><span>Choose or drag an action from the library</span></div>}
           </div>
         </section>
 
@@ -933,8 +998,17 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
           </nav>
           <div className="object-library-actions">
             {activeLibrary?.actions.map((action) => (
-              <button key={`${action.libraryId}:${action.id}`} onClick={() => addAction(action)} disabled={!selectedEvent} title={action.description}>
-                {action.icon ? <img src={action.icon} alt="" /> : <Braces size={19} />}
+              <button
+                key={`${action.libraryId}:${action.id}`}
+                className={draggedAction === actionKey(action) ? 'dragging' : ''}
+                draggable={Boolean(selectedEvent)}
+                onDragStart={(event) => startLibraryDrag(event, action)}
+                onDragEnd={() => { setDraggedAction(''); setDropActionPos(null) }}
+                onClick={() => addAction(action)}
+                disabled={!selectedEvent}
+                title={`${action.description || action.name}\nDrag or click to add`}
+              >
+                {action.icon ? <img src={action.icon} alt="" draggable={false} /> : <Braces size={19} />}
                 <span>{action.description || action.name}</span>
               </button>
             ))}

@@ -231,7 +231,7 @@ export function MenuBar(): React.JSX.Element {
       items: [
         {
           label: 'Run',
-          shortcut: 'F6',
+          shortcut: 'F5',
           action: () => void runProject(),
           disabled: loading || busy || saveState.saving
         },

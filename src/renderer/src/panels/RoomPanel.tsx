@@ -9,6 +9,7 @@ import {
   Eye,
   Grid3X3,
   Image as ImageIcon,
+  Info,
   Layers3,
   Map,
   Plus,
@@ -650,9 +651,9 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
         </Group>
         <Group title="Object to add with left mouse">
           <ResourceSelect value={objectName} options={objectItems} placeholder="Search objects" onChange={setObjectName} />
+          <div className="room-tree-tip"><Info size={14} /><span><strong>Tip:</strong> You can also select an Object in the resource tree.</span></div>
           <CheckField label="Delete underlying" checked={deleteObjects} onChange={setDeleteObjects} />
         </Group>
-        <p className="room-help">Tip: Click an Object in the resource tree to switch the current placement object. Left click adds or selects an instance. Drag an instance to move it or drag its corner handles to stretch it. Right click deletes. Hold Alt to ignore snapping. Middle drag or Space + left drag pans the room.</p>
       </>
     )
   }

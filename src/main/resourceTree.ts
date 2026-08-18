@@ -26,6 +26,7 @@ import type {
   ResourceTreeRef,
   ResourceType
 } from '../shared/types'
+import { withGmezDescriptor } from './gmez'
 
 type XmlDoc = ReturnType<DOMParser['parseFromString']>
 type XmlElement = NonNullable<XmlDoc['documentElement']>
@@ -1048,6 +1049,10 @@ export async function addExistingResource(
   groupPath: unknown,
   sourceFile: string
 ): Promise<void> {
+  if (type === 'extension' && extname(sourceFile).toLowerCase() === '.gmez') {
+    return withGmezDescriptor(sourceFile, (descriptor) =>
+      addExistingResource(projectFile, type, groupPath, descriptor))
+  }
   const tree = await loadTree(projectFile, type)
   const path = validateGroupPath(groupPath)
   if (tree.spec.mode === 'extensions' && path.length > 0) throw new Error('Extensions do not support groups')
@@ -1451,6 +1456,12 @@ function validatePosition(value: unknown): ResourceDropPosition {
 export function resourceFilter(type: ResourceType): { name: string; extensions: string[] }[] {
   const spec = specFor(type)
   if (spec.mode === 'files') return [{ name: 'All Files', extensions: ['*'] }]
+  if (spec.mode === 'extensions') {
+    return [
+      { name: 'Extension Packages', extensions: ['gmez', 'extension.gmx'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  }
   const extension = spec.extension.replace(/^\./, '').split('.')
   return [
     { name: `${type[0].toUpperCase()}${type.slice(1)} Resources`, extensions: [extension.join('.')] },

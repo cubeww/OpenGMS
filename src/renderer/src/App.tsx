@@ -65,7 +65,7 @@ export function App(): React.JSX.Element {
         !event.metaKey &&
         !event.altKey &&
         !event.shiftKey &&
-        event.key === 'F6'
+        event.key === 'F5'
       ) {
         event.preventDefault()
         void runProject()

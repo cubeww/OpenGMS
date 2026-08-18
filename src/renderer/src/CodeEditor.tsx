@@ -15,6 +15,7 @@ import {
   setCodeBuffer
 } from './codeReveal'
 import { codeFontFamily, useEditorSettings } from './editorSettings'
+import { gmlResourceAt, openGmlResource } from './gml'
 import { monaco, setupMonaco } from './monaco'
 
 type CodeEditorProps = {
@@ -138,6 +139,53 @@ export function CodeEditor({
     const position = editor.onDidChangeCursorPosition((event) => {
       setCursor({ line: event.position.lineNumber, column: event.position.column })
     })
+    const resourceLink = editor.createDecorationsCollection()
+    let hoverPosition: monaco.Position | null = null
+
+    const showResourceLink = (targetPosition: monaco.Position | null): void => {
+      if (language !== 'gml' || !targetPosition) {
+        resourceLink.clear()
+        return
+      }
+      const target = gmlResourceAt(model, targetPosition)
+      resourceLink.set(target ? [{
+        range: target.range,
+        options: {
+          inlineClassName: 'gml-resource-link'
+        }
+      }] : [])
+    }
+
+    const resourceMove = editor.onMouseMove((event) => {
+      hoverPosition = event.target.position
+      if (event.event.ctrlKey) showResourceLink(hoverPosition)
+      else resourceLink.clear()
+    })
+    const resourceLeave = editor.onMouseLeave(() => {
+      hoverPosition = null
+      resourceLink.clear()
+    })
+    const resourceKeyDown = editor.onKeyDown((event) => {
+      if (event.ctrlKey) showResourceLink(hoverPosition)
+    })
+    const resourceKeyUp = editor.onKeyUp((event) => {
+      if (!event.ctrlKey) resourceLink.clear()
+    })
+    const resourceOpen = editor.onMouseDown((event) => {
+      if (
+        language !== 'gml' ||
+        !event.event.leftButton ||
+        !event.event.ctrlKey ||
+        !event.target.position
+      ) return
+
+      const target = gmlResourceAt(model, event.target.position)
+      if (!target) return
+      event.event.preventDefault()
+      event.event.stopPropagation()
+      resourceLink.clear()
+      openGmlResource(target.name)
+    })
     const stopReveal = listenCodeReveal(id, (target) => {
       const start = model.validatePosition({
         lineNumber: target.line,
@@ -164,6 +212,12 @@ export function CodeEditor({
       stopReveal()
       content.dispose()
       position.dispose()
+      resourceMove.dispose()
+      resourceLeave.dispose()
+      resourceKeyDown.dispose()
+      resourceKeyUp.dispose()
+      resourceOpen.dispose()
+      resourceLink.clear()
       editorRef.current = null
       modelRef.current = null
       clearCodeBuffer(id)

@@ -88,6 +88,10 @@ type Drag =
     name: string
     anchorX: number
     anchorY: number
+    pointerX: number
+    pointerY: number
+    handleX: number
+    handleY: number
     rotation: number
     oppositeX: number
     oppositeY: number
@@ -497,25 +501,30 @@ export function RoomCanvas({
       const visual = backgroundVisuals.get(layer.name)
       const image = visual?.url ? imagesRef.current.get(visual.url) : undefined
       if (!visual || !imageReady(image)) return
+      context.save()
+      context.beginPath()
+      context.rect(0, 0, room.width, room.height)
+      context.clip()
       if (layer.stretch) {
         context.drawImage(image, 0, 0, room.width, room.height)
-        return
-      }
-      const width = Math.max(1, visual.width || image.naturalWidth)
-      const height = Math.max(1, visual.height || image.naturalHeight)
-      const startX = layer.tileX ? ((layer.x % width) + width) % width - width : layer.x
-      const startY = layer.tileY ? ((layer.y % height) + height) % height - height : layer.y
-      const endX = layer.tileX ? room.width : startX + width
-      const endY = layer.tileY ? room.height : startY + height
-      let count = 0
-      for (let y = startY; y < endY && count < 10000; y += height) {
-        for (let x = startX; x < endX && count < 10000; x += width) {
-          context.drawImage(image, x, y, width, height)
-          count += 1
-          if (!layer.tileX) break
+      } else {
+        const width = Math.max(1, visual.width || image.naturalWidth)
+        const height = Math.max(1, visual.height || image.naturalHeight)
+        const startX = layer.tileX ? ((layer.x % width) + width) % width - width : layer.x
+        const startY = layer.tileY ? ((layer.y % height) + height) % height - height : layer.y
+        const endX = layer.tileX ? room.width : startX + width
+        const endY = layer.tileY ? room.height : startY + height
+        let count = 0
+        for (let y = startY; y < endY && count < 10000; y += height) {
+          for (let x = startX; x < endX && count < 10000; x += width) {
+            context.drawImage(image, x, y, width, height)
+            count += 1
+            if (!layer.tileX) break
+          }
+          if (!layer.tileY) break
         }
-        if (!layer.tileY) break
       }
+      context.restore()
     }
 
     room.backgrounds.forEach((layer, index) => { if (!layer.foreground) drawBackground(index) })
@@ -787,6 +796,10 @@ export function RoomCanvas({
           name: current.name,
           anchorX: opposite.x,
           anchorY: opposite.y,
+          pointerX: point.x,
+          pointerY: point.y,
+          handleX: handle.x,
+          handleY: handle.y,
           rotation: current.rotation,
           oppositeX: opposite.localX,
           oppositeY: opposite.localY,
@@ -838,11 +851,23 @@ export function RoomCanvas({
       return
     }
     if (drag.kind === 'resize') {
+      const deltaX = point.x - drag.pointerX
+      const deltaY = point.y - drag.pointerY
+      const handle = event.altKey
+        ? {
+          x: drag.handleX + Math.round(deltaX),
+          y: drag.handleY + Math.round(deltaY)
+        }
+        : {
+          x: drag.handleX + snapDelta(deltaX, room.snapX),
+          y: drag.handleY + snapDelta(deltaY, room.snapY)
+        }
+      setHover({ rawX: point.x, rawY: point.y, ...handle })
       const rotation = drag.rotation * Math.PI / 180
       const cosine = Math.cos(rotation)
       const sine = Math.sin(rotation)
-      const dx = target.x - drag.anchorX
-      const dy = target.y - drag.anchorY
+      const dx = handle.x - drag.anchorX
+      const dy = handle.y - drag.anchorY
       const localX = cosine * dx - sine * dy
       const localY = sine * dx + cosine * dy
       const scaleX = localX / drag.width

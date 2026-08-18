@@ -1,9 +1,12 @@
 import type * as Monaco from 'monaco-editor/editor/editor.api'
 import type { Project, ProjectItem, ResourceType } from '../../shared/types'
 import { gmlFunctions, type GmlFunction } from './gmlBuiltins'
+import { gmlConstants, gmlVariables } from './gmlSymbols'
 import { useApp } from './store'
 
 type MonacoApi = typeof Monaco
+
+type ResourceItem = Extract<ProjectItem, { kind: 'resource' }>
 
 type ProjectSymbol = {
   name: string
@@ -11,11 +14,24 @@ type ProjectSymbol = {
   type: 'function' | 'resource' | 'constant'
   signature?: string
   description?: string
+  resource?: ResourceItem
 }
 
 type Call = {
   name: string
   argument: number
+}
+
+export type GmlResourceTarget = {
+  name: string
+  detail: string
+  range: Monaco.IRange
+}
+
+type ResourceTargetCache = {
+  version: number
+  project: Project | null
+  targets: GmlResourceTarget[]
 }
 
 const keywords = [
@@ -26,69 +42,9 @@ const keywords = [
 
 const wordOperators = ['and', 'div', 'mod', 'not', 'or', 'xor']
 
-const constants = [
-  'all', 'false', 'noone', 'other', 'pi', 'pointer_null', 'self', 'true', 'undefined',
-  'c_aqua', 'c_black', 'c_blue', 'c_dkgray', 'c_fuchsia', 'c_gray', 'c_green',
-  'c_lime', 'c_ltgray', 'c_maroon', 'c_navy', 'c_olive', 'c_orange', 'c_purple',
-  'c_red', 'c_silver', 'c_teal', 'c_white', 'c_yellow',
-  'vk_nokey', 'vk_anykey', 'vk_enter', 'vk_return', 'vk_shift', 'vk_control',
-  'vk_alt', 'vk_escape', 'vk_space', 'vk_backspace', 'vk_tab', 'vk_pause',
-  'vk_printscreen', 'vk_left', 'vk_right', 'vk_up', 'vk_down', 'vk_home', 'vk_end',
-  'vk_delete', 'vk_insert', 'vk_pageup', 'vk_pagedown', 'vk_f1', 'vk_f2', 'vk_f3',
-  'vk_f4', 'vk_f5', 'vk_f6', 'vk_f7', 'vk_f8', 'vk_f9', 'vk_f10', 'vk_f11',
-  'vk_f12', 'vk_numpad0', 'vk_numpad1', 'vk_numpad2', 'vk_numpad3', 'vk_numpad4',
-  'vk_numpad5', 'vk_numpad6', 'vk_numpad7', 'vk_numpad8', 'vk_numpad9',
-  'vk_multiply', 'vk_add', 'vk_subtract', 'vk_decimal', 'vk_divide',
-  'mb_none', 'mb_any', 'mb_left', 'mb_middle', 'mb_right',
-  'fa_left', 'fa_center', 'fa_right', 'fa_top', 'fa_middle', 'fa_bottom',
-  'bm_normal', 'bm_add', 'bm_max', 'bm_subtract', 'bm_zero', 'bm_one',
-  'bm_src_colour', 'bm_inv_src_colour', 'bm_src_alpha', 'bm_inv_src_alpha',
-  'bm_dest_alpha', 'bm_inv_dest_alpha', 'bm_dest_colour', 'bm_inv_dest_colour',
-  'pr_pointlist', 'pr_linelist', 'pr_linestrip', 'pr_trianglelist', 'pr_trianglestrip',
-  'pr_trianglefan', 'cr_default', 'cr_none', 'cr_arrow', 'cr_cross', 'cr_beam',
-  'cr_size_nesw', 'cr_size_ns', 'cr_size_nwse', 'cr_size_we', 'cr_uparrow',
-  'cr_hourglass', 'cr_drag', 'cr_nodrop', 'cr_hsplit', 'cr_vsplit', 'cr_multidrag',
-  'cr_sqlwait', 'cr_no', 'cr_appstart', 'cr_help', 'cr_handpoint', 'cr_size_all',
-  'path_action_stop', 'path_action_restart', 'path_action_continue', 'path_action_reverse',
-  'buffer_fixed', 'buffer_grow', 'buffer_wrap', 'buffer_fast', 'buffer_vbuffer',
-  'buffer_u8', 'buffer_s8', 'buffer_u16', 'buffer_s16', 'buffer_u32', 'buffer_s32',
-  'buffer_f16', 'buffer_f32', 'buffer_f64', 'buffer_bool', 'buffer_string', 'buffer_text',
-  'buffer_seek_start', 'buffer_seek_relative', 'buffer_seek_end',
-  'ds_type_map', 'ds_type_list', 'ds_type_stack', 'ds_type_grid', 'ds_type_queue',
-  'ds_type_priority', 'audio_falloff_none', 'audio_falloff_inverse_distance',
-  'audio_falloff_inverse_distance_clamped', 'audio_falloff_linear_distance',
-  'audio_falloff_linear_distance_clamped', 'audio_falloff_exponent_distance',
-  'audio_falloff_exponent_distance_clamped', 'os_windows', 'os_macosx', 'os_ios',
-  'os_android', 'os_linux', 'os_win8native', 'os_tizen', 'browser_not_a_browser',
-  'browser_unknown', 'browser_ie', 'browser_firefox', 'browser_chrome', 'browser_safari',
-  'browser_opera', 'device_ios_unknown', 'device_ios_iphone', 'device_ios_iphone_retina',
-  'device_ios_ipad', 'device_ios_ipad_retina', 'device_ios_iphone5',
-  'network_socket_tcp', 'network_socket_udp', 'network_socket_bluetooth',
-  'network_type_none', 'network_type_unknown', 'network_type_ethernet',
-  'network_type_wifi', 'network_type_wimax', 'network_type_bluetooth',
-  'network_type_2g', 'network_type_3g', 'network_type_4g'
-]
+const constants = [...gmlConstants]
 
-const builtInVariables = [
-  'global', 'id', 'object_index', 'x', 'y', 'xprevious', 'yprevious', 'xstart', 'ystart',
-  'hspeed', 'vspeed', 'direction', 'speed', 'friction', 'gravity', 'gravity_direction',
-  'solid', 'visible', 'persistent', 'depth', 'bbox_left', 'bbox_right', 'bbox_top',
-  'bbox_bottom', 'sprite_index', 'image_index', 'image_number', 'image_speed',
-  'image_xscale', 'image_yscale', 'image_angle', 'image_alpha', 'image_blend', 'mask_index',
-  'alarm', 'timeline_index', 'timeline_position', 'timeline_speed', 'path_index',
-  'path_position', 'path_positionprevious', 'path_speed', 'path_scale', 'path_orientation',
-  'path_endaction', 'room', 'room_first', 'room_last', 'room_width', 'room_height',
-  'room_speed', 'room_caption', 'background_color', 'background_showcolor', 'view_enabled',
-  'view_current', 'mouse_x', 'mouse_y', 'keyboard_key', 'keyboard_lastkey',
-  'keyboard_lastchar', 'score', 'lives', 'health', 'show_score', 'show_lives', 'show_health',
-  'caption_score', 'caption_lives', 'caption_health', 'fps', 'fps_real', 'current_time',
-  'current_year', 'current_month', 'current_day', 'current_weekday', 'current_hour',
-  'current_minute', 'current_second', 'event_type', 'event_number', 'event_object',
-  'event_action', 'secure_mode', 'debug_mode', 'async_load', 'application_surface',
-  'os_type', 'os_device', 'os_version', 'browser_type', 'device_mouse_x', 'device_mouse_y',
-  'argument', 'argument_count', 'argument_relative',
-  ...Array.from({ length: 16 }, (_item, index) => `argument${index}`)
-]
+const builtInVariables = [...gmlVariables]
 
 const snippets = [
   { label: 'if', detail: 'If statement', text: 'if (${1:condition}) {\n\t$0\n}' },
@@ -104,6 +60,22 @@ const snippets = [
 
 const functionByName = new Map(gmlFunctions.map((item) => [item.name, item]))
 const projectCache = new WeakMap<Project, ProjectSymbol[]>()
+const resourceTargetCache = new WeakMap<Monaco.editor.ITextModel, ResourceTargetCache>()
+
+const resourceOpenEvents: Partial<Record<ResourceType, string>> = {
+  sprite: 'opengms:open-sprite',
+  sound: 'opengms:open-sound',
+  background: 'opengms:open-background',
+  path: 'opengms:open-path',
+  font: 'opengms:open-font',
+  script: 'opengms:open-script',
+  shader: 'opengms:open-shader',
+  object: 'opengms:open-object',
+  timeline: 'opengms:open-timeline',
+  room: 'opengms:open-room',
+  extension: 'opengms:open-extension',
+  macro: 'opengms:open-macro'
+}
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -171,7 +143,8 @@ function projectSymbols(project: Project | null): ProjectSymbol[] {
         name: entry.name,
         detail: `Project macro · ${item.name}`,
         type: 'constant',
-        description: entry.value
+        description: entry.value,
+        resource: item
       }))
       return
     }
@@ -183,7 +156,8 @@ function projectSymbols(project: Project | null): ProjectSymbol[] {
       signature: item.type === 'script' ? item.script?.signature ?? `${item.name}()` : undefined,
       description: item.type === 'script'
         ? item.script?.description || item.path
-        : item.path
+        : item.path,
+      resource: item
     })
 
     if (item.type === 'extension') {
@@ -206,6 +180,123 @@ function projectSymbols(project: Project | null): ProjectSymbol[] {
   const result = [...symbols.values()]
   projectCache.set(project, result)
   return result
+}
+
+export function openGmlResource(name: string): boolean {
+  const symbol = projectSymbols(useApp.getState().project).find((item) => item.name === name)
+  const resource = symbol?.resource
+  const event = resource && resourceOpenEvents[resource.type]
+  if (!resource || !event) return false
+
+  window.dispatchEvent(new CustomEvent('opengms:select-resource', { detail: resource }))
+  window.dispatchEvent(new CustomEvent(event, { detail: resource }))
+  return true
+}
+
+function resourceTargets(model: Monaco.editor.ITextModel): GmlResourceTarget[] {
+  const project = useApp.getState().project
+  const version = model.getVersionId()
+  const cached = resourceTargetCache.get(model)
+  if (cached?.version === version && cached.project === project) return cached.targets
+
+  const symbols = new Map(
+    projectSymbols(project)
+      .filter((item) => item.resource && resourceOpenEvents[item.resource.type])
+      .map((item) => [item.name, item])
+  )
+  if (!symbols.size) {
+    resourceTargetCache.set(model, { version, project, targets: [] })
+    return []
+  }
+
+  const shadowed = new Set(localNames(model).map((item) => item.name))
+  const targets: GmlResourceTarget[] = []
+  let blockComment = false
+
+  for (let lineNumber = 1; lineNumber <= model.getLineCount(); lineNumber += 1) {
+    const line = model.getLineContent(lineNumber)
+    let quote = ''
+
+    for (let index = 0; index < line.length;) {
+      const char = line[index]
+      const next = line[index + 1]
+
+      if (blockComment) {
+        if (char === '*' && next === '/') {
+          blockComment = false
+          index += 2
+        } else index += 1
+        continue
+      }
+
+      if (quote) {
+        if (char === '\\') index += 2
+        else {
+          if (char === quote) quote = ''
+          index += 1
+        }
+        continue
+      }
+
+      if (char === '/' && next === '/') break
+      if (char === '/' && next === '*') {
+        blockComment = true
+        index += 2
+        continue
+      }
+      if (char === '"' || char === "'") {
+        quote = char
+        index += 1
+        continue
+      }
+      if (char === '$') {
+        index += 1
+        while (/[0-9a-fA-F]/.test(line[index] ?? '')) index += 1
+        continue
+      }
+      if (/\d/.test(char)) {
+        index += 1
+        while (/[a-zA-Z0-9_.]/.test(line[index] ?? '')) index += 1
+        continue
+      }
+      if (!/[a-zA-Z_]/.test(char)) {
+        index += 1
+        continue
+      }
+
+      const start = index
+      index += 1
+      while (/\w/.test(line[index] ?? '')) index += 1
+      const name = line.slice(start, index)
+      const symbol = symbols.get(name)
+      if (!symbol || shadowed.has(name)) continue
+
+      targets.push({
+        name,
+        detail: symbol.detail,
+        range: {
+          startLineNumber: lineNumber,
+          startColumn: start + 1,
+          endLineNumber: lineNumber,
+          endColumn: index + 1
+        }
+      })
+    }
+  }
+
+  resourceTargetCache.set(model, { version, project, targets })
+  return targets
+}
+
+export function gmlResourceAt(
+  model: Monaco.editor.ITextModel,
+  position: Monaco.IPosition
+): GmlResourceTarget | null {
+  return resourceTargets(model).find((target) => (
+    target.range.startLineNumber === position.lineNumber &&
+    position.column >= target.range.startColumn &&
+    position.column < target.range.endColumn
+  )) ?? null
 }
 
 function localNames(model: Monaco.editor.ITextModel): Array<{ name: string; detail: string }> {

@@ -111,7 +111,7 @@ export function ToolBar(): React.JSX.Element {
       <span className="tool-separator" />
       <div className="tool-group">
         <ToolButton
-          label="Run (F6)"
+          label="Run (F5)"
           disabled={loading || busy || saveState.saving}
           onClick={() => void runProject()}
         >
