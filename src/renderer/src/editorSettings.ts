@@ -1,5 +1,22 @@
 import { useSyncExternalStore } from 'react'
 
+export type EditorColors = {
+  text: string
+  keyword: string
+  operator: string
+  builtInFunction: string
+  function: string
+  resource: string
+  variable: string
+  constant: string
+  string: string
+  number: string
+  comment: string
+  docComment: string
+  enumName: string
+  enumMember: string
+}
+
 export type EditorSettings = {
   fontFamily: string
   fontFallback: string
@@ -9,6 +26,24 @@ export type EditorSettings = {
   fontLigatures: boolean
   wordWrap: boolean
   minimap: boolean
+  colors: EditorColors
+}
+
+export const defaultEditorColors: EditorColors = {
+  text: '#D7DCE5',
+  keyword: '#C792EA',
+  operator: '#89DDFF',
+  builtInFunction: '#82AAFF',
+  function: '#80CBC4',
+  resource: '#E6A96B',
+  variable: '#F78C6C',
+  constant: '#FFCB6B',
+  string: '#C3E88D',
+  number: '#F78C6C',
+  comment: '#667085',
+  docComment: '#7F9F7F',
+  enumName: '#80CBC4',
+  enumMember: '#FFCB6B'
 }
 
 export const defaultEditorSettings: EditorSettings = {
@@ -19,7 +54,8 @@ export const defaultEditorSettings: EditorSettings = {
   tabSize: 4,
   fontLigatures: true,
   wordWrap: false,
-  minimap: true
+  minimap: true,
+  colors: defaultEditorColors
 }
 
 const storageKey = 'opengms.editor-settings.v1'
@@ -29,6 +65,38 @@ function number(value: unknown, fallback: number, min: number, max: number): num
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(min, Math.min(max, Math.round(value)))
     : fallback
+}
+
+function color(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback
+  const next = value.trim()
+  return /^#[0-9a-f]{6}$/i.test(next) ? next.toUpperCase() : fallback
+}
+
+function colors(value: unknown): EditorColors {
+  const source = value && typeof value === 'object'
+    ? value as Partial<EditorColors>
+    : {}
+  return {
+    text: color(source.text, defaultEditorColors.text),
+    keyword: color(source.keyword, defaultEditorColors.keyword),
+    operator: color(source.operator, defaultEditorColors.operator),
+    builtInFunction: color(source.builtInFunction, defaultEditorColors.builtInFunction),
+    function: color(source.function, defaultEditorColors.function),
+    resource: color(source.resource, defaultEditorColors.resource),
+    variable: color(source.variable, defaultEditorColors.variable),
+    constant: color(source.constant, defaultEditorColors.constant),
+    string: color(source.string, defaultEditorColors.string),
+    number: color(source.number, defaultEditorColors.number),
+    comment: color(source.comment, defaultEditorColors.comment),
+    docComment: color(source.docComment, defaultEditorColors.docComment),
+    enumName: color(source.enumName, defaultEditorColors.enumName),
+    enumMember: color(source.enumMember, defaultEditorColors.enumMember)
+  }
+}
+
+function defaults(): EditorSettings {
+  return { ...defaultEditorSettings, colors: { ...defaultEditorColors } }
 }
 
 function normalize(value: Partial<EditorSettings>): EditorSettings {
@@ -52,7 +120,8 @@ function normalize(value: Partial<EditorSettings>): EditorSettings {
       : defaultEditorSettings.wordWrap,
     minimap: typeof value.minimap === 'boolean'
       ? value.minimap
-      : defaultEditorSettings.minimap
+      : defaultEditorSettings.minimap,
+    colors: colors(value.colors)
   }
 }
 
@@ -63,7 +132,7 @@ function load(): EditorSettings {
   } catch {
     // Ignore malformed or unavailable local settings.
   }
-  return { ...defaultEditorSettings }
+  return defaults()
 }
 
 let current = load()
@@ -87,7 +156,7 @@ export function updateEditorSettings(change: Partial<EditorSettings>): void {
 }
 
 export function resetEditorSettings(): void {
-  current = { ...defaultEditorSettings }
+  current = defaults()
   save()
   emit()
 }

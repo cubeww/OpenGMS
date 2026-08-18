@@ -63,6 +63,13 @@ type CodeSource = Omit<
   code: string
 }
 
+export type ProjectCodeSource = {
+  key: string
+  code: string
+  resourceName: string
+  section: string
+}
+
 type SearchListener = (result: CodeSearchResult) => void
 
 const resultLimit = 5000
@@ -314,6 +321,18 @@ async function codeSources(project: Project): Promise<{ sources: CodeSource[]; e
   })
 
   return { sources, errors }
+}
+
+export async function projectGmlSources(project: Project): Promise<ProjectCodeSource[]> {
+  const loaded = await codeSources(project)
+  return loaded.sources
+    .filter((source) => source.resourceType !== 'shader')
+    .map((source) => ({
+      key: source.key,
+      code: source.code,
+      resourceName: source.resourceName,
+      section: source.section
+    }))
 }
 
 function word(value: string | undefined): boolean {

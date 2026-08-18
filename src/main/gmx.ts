@@ -8,6 +8,7 @@ import { loadMacros } from './macro'
 import { loadPath } from './path'
 import { loadShader, shaderType } from './shader'
 import { loadTimeline } from './timeline'
+import { parseScriptInfo } from '../shared/script'
 import type {
   BackgroundData,
   FontData,
@@ -15,7 +16,6 @@ import type {
   ProjectGroup,
   ProjectItem,
   ResourceType,
-  ScriptInfo,
   ShaderType,
   SoundData,
   SoundMode,
@@ -512,38 +512,10 @@ async function loadFont(item: ResourceItem): Promise<FontData | undefined> {
   }
 }
 
-async function loadScriptInfo(item: ResourceItem): Promise<ScriptInfo | undefined> {
+async function loadScriptInfo(item: ResourceItem): Promise<ReturnType<typeof parseScriptInfo> | undefined> {
   try {
     const source = await readFile(item.file, 'utf8')
-    const lines = source.replace(/^\uFEFF/, '').split(/\r?\n/)
-    const header = lines.slice(0, 12).map((line) =>
-      line.match(/^\s*\/\/\/\s*(.*)$/)?.[1]?.trim() ?? ''
-    )
-    const signatureLine = header.find((line) =>
-      new RegExp(`^${item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\(`, 'i').test(line)
-    )
-    const signatureMatch = signatureLine?.match(/^[a-zA-Z_]\w*\s*\(([^)]*)\)/)
-    let args = signatureMatch?.[1]
-      .split(',')
-      .map((value) => value.trim())
-      .filter((value) => /^[a-zA-Z_]\w*$/.test(value)) ?? []
-
-    if (!signatureMatch) {
-      let highest = -1
-      for (const match of source.matchAll(/\bargument(\d+)\b/g)) {
-        highest = Math.max(highest, Number.parseInt(match[1], 10))
-      }
-      args = Array.from({ length: Math.min(32, highest + 1) }, (_value, index) => `argument${index}`)
-    }
-
-    const description = header.find((line) =>
-      line && line !== signatureLine && !/^argument\d+\b/i.test(line)
-    )?.replace(/^@description\s*/i, '') ?? ''
-
-    return {
-      signature: `${item.name}(${args.join(', ')})`,
-      description
-    }
+    return parseScriptInfo(item.name, source)
   } catch {
     return undefined
   }

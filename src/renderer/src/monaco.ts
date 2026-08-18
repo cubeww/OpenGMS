@@ -6,6 +6,8 @@ import 'monaco-editor/editor/contrib/comment/browser/comment.js'
 import 'monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js'
 import 'monaco-editor/editor/contrib/find/browser/findController.js'
 import 'monaco-editor/editor/contrib/folding/browser/folding.js'
+import 'monaco-editor/editor/contrib/gotoSymbol/browser/goToCommands.js'
+import 'monaco-editor/editor/contrib/gotoSymbol/browser/link/goToDefinitionAtPosition.js'
 import 'monaco-editor/editor/contrib/hover/browser/hoverContribution.js'
 import 'monaco-editor/editor/contrib/indentation/browser/indentation.js'
 import 'monaco-editor/editor/contrib/linesOperations/browser/linesOperations.js'
@@ -17,6 +19,7 @@ import 'monaco-editor/editor/contrib/suggest/browser/suggestController.js'
 import 'monaco-editor/editor/contrib/wordHighlighter/browser/wordHighlighter.js'
 import 'monaco-editor/editor/contrib/wordOperations/browser/wordOperations.js'
 import 'monaco-editor/editor/standalone/browser/quickAccess/standaloneGotoLineQuickAccess.js'
+import { defaultEditorColors, type EditorColors } from './editorSettings'
 import { registerGml } from './gml'
 
 type MonacoHost = typeof globalThis & {
@@ -30,9 +33,87 @@ type MonacoHost = typeof globalThis & {
 }
 
 let ready = false
+let themeKey = ''
 
-export function setupMonaco(): void {
-  if (ready) return
+function tokenColor(value: string): string {
+  return value.slice(1)
+}
+
+export function applyEditorTheme(colors: EditorColors): void {
+  const key = Object.values(colors).join('|')
+  if (themeKey === key) return
+  themeKey = key
+
+  monaco.editor.defineTheme('opengms-dark', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [
+      { token: 'identifier.gml', foreground: tokenColor(colors.text) },
+      { token: 'keyword.gml', foreground: tokenColor(colors.keyword) },
+      { token: 'keyword.directive.gml', foreground: tokenColor(colors.operator) },
+      { token: 'operator.gml', foreground: tokenColor(colors.operator) },
+      { token: 'operator.word.gml', foreground: tokenColor(colors.operator) },
+      { token: 'constant.gml', foreground: tokenColor(colors.constant) },
+      { token: 'variable.predefined.gml', foreground: tokenColor(colors.variable) },
+      { token: 'builtin.function.gml', foreground: tokenColor(colors.builtInFunction) },
+      { token: 'function.gml', foreground: tokenColor(colors.function) },
+      { token: 'comment.doc.gml', foreground: tokenColor(colors.docComment), fontStyle: 'italic' },
+      { token: 'comment.gml', foreground: tokenColor(colors.comment), fontStyle: 'italic' },
+      { token: 'string.gml', foreground: tokenColor(colors.string) },
+      { token: 'string.escape.gml', foreground: tokenColor(colors.operator) },
+      { token: 'number.gml', foreground: tokenColor(colors.number) },
+      { token: 'number.float.gml', foreground: tokenColor(colors.number) },
+      { token: 'number.hex.gml', foreground: tokenColor(colors.number) },
+      { token: 'keyword.glsl', foreground: tokenColor(colors.keyword) },
+      { token: 'keyword.hlsl', foreground: tokenColor(colors.keyword) },
+      { token: 'keyword.directive.glsl', foreground: tokenColor(colors.operator) },
+      { token: 'keyword.directive.hlsl', foreground: tokenColor(colors.operator) },
+      { token: 'operator.glsl', foreground: tokenColor(colors.operator) },
+      { token: 'operator.hlsl', foreground: tokenColor(colors.operator) },
+      { token: 'type.glsl', foreground: tokenColor(colors.constant) },
+      { token: 'type.hlsl', foreground: tokenColor(colors.constant) },
+      { token: 'type.identifier.glsl', foreground: tokenColor(colors.builtInFunction) },
+      { token: 'type.identifier.hlsl', foreground: tokenColor(colors.builtInFunction) },
+      { token: 'constant.glsl', foreground: tokenColor(colors.constant) },
+      { token: 'constant.hlsl', foreground: tokenColor(colors.constant) },
+      { token: 'comment.glsl', foreground: tokenColor(colors.comment), fontStyle: 'italic' },
+      { token: 'comment.hlsl', foreground: tokenColor(colors.comment), fontStyle: 'italic' },
+      { token: 'string.glsl', foreground: tokenColor(colors.string) },
+      { token: 'string.hlsl', foreground: tokenColor(colors.string) },
+      { token: 'string.escape.glsl', foreground: tokenColor(colors.operator) },
+      { token: 'string.escape.hlsl', foreground: tokenColor(colors.operator) },
+      { token: 'number.glsl', foreground: tokenColor(colors.number) },
+      { token: 'number.hlsl', foreground: tokenColor(colors.number) },
+      { token: 'number.float.glsl', foreground: tokenColor(colors.number) },
+      { token: 'number.float.hlsl', foreground: tokenColor(colors.number) },
+      { token: 'number.hex.glsl', foreground: tokenColor(colors.number) },
+      { token: 'number.hex.hlsl', foreground: tokenColor(colors.number) },
+      { token: 'function.glsl', foreground: tokenColor(colors.function) },
+      { token: 'function.hlsl', foreground: tokenColor(colors.function) }
+    ],
+    colors: {
+      'editor.background': '#11151B',
+      'editor.foreground': colors.text,
+      'editor.lineHighlightBackground': '#171D26',
+      'editorCursor.foreground': '#7AA2F7',
+      'editor.selectionBackground': '#29436A',
+      'editorLineNumber.foreground': '#505866',
+      'editorLineNumber.activeForeground': '#9AA5B5',
+      'editorIndentGuide.background1': '#232A35',
+      'editorIndentGuide.activeBackground1': '#394354'
+    }
+  })
+  document.documentElement.style.setProperty('--gml-enum-name', colors.enumName)
+  document.documentElement.style.setProperty('--gml-enum-member', colors.enumMember)
+  document.documentElement.style.setProperty('--gml-resource-name', colors.resource)
+  monaco.editor.setTheme('opengms-dark')
+}
+
+export function setupMonaco(colors: EditorColors = defaultEditorColors): void {
+  if (ready) {
+    applyEditorTheme(colors)
+    return
+  }
   ready = true
 
   registerGml(monaco)
@@ -69,6 +150,7 @@ export function setupMonaco(): void {
           [/^\s*#\s*[a-zA-Z_]+.*$/, 'keyword.directive'],
           [/\/\*/, 'comment', '@comment'],
           [/\/\/.*$/, 'comment'],
+          [/[a-zA-Z_]\w*(?=\s*\()/, { cases: { '@keywords': 'keyword', '@types': 'type', '@builtins': 'type.identifier', '@default': 'function' } }],
           [/[a-zA-Z_]\w*/, { cases: { '@keywords': 'keyword', '@types': 'type', '@constants': 'constant', '@builtins': 'type.identifier', '@default': 'identifier' } }],
           [/\d*\.\d+([eE][-+]?\d+)?[fF]?/, 'number.float'],
           [/0[xX][0-9a-fA-F]+/, 'number.hex'],
@@ -111,47 +193,7 @@ export function setupMonaco(): void {
     ['void', 'bool', 'int', 'uint', 'half', 'float', 'double', 'float2', 'float3', 'float4', 'float2x2', 'float3x3', 'float4x4', 'sampler', 'sampler2D', 'SamplerState', 'Texture2D', 'TextureCube']
   )
 
-  monaco.editor.defineTheme('opengms-dark', {
-    base: 'vs-dark',
-    inherit: true,
-    rules: [
-      { token: 'keyword.gml', foreground: 'C792EA' },
-      { token: 'keyword.directive.gml', foreground: '89DDFF' },
-      { token: 'operator.word.gml', foreground: '89DDFF' },
-      { token: 'constant.gml', foreground: 'FFCB6B' },
-      { token: 'variable.predefined.gml', foreground: 'F78C6C' },
-      { token: 'builtin.function.gml', foreground: '82AAFF' },
-      { token: 'function.gml', foreground: '80CBC4' },
-      { token: 'comment.doc.gml', foreground: '7F9F7F', fontStyle: 'italic' },
-      { token: 'comment.gml', foreground: '667085', fontStyle: 'italic' },
-      { token: 'string.gml', foreground: 'C3E88D' },
-      { token: 'string.escape.gml', foreground: '89DDFF' },
-      { token: 'number.gml', foreground: 'F78C6C' },
-      { token: 'number.float.gml', foreground: 'F78C6C' },
-      { token: 'number.hex.gml', foreground: 'F78C6C' },
-      { token: 'keyword.glsl', foreground: 'C792EA' },
-      { token: 'keyword.hlsl', foreground: 'C792EA' },
-      { token: 'keyword.directive.glsl', foreground: '89DDFF' },
-      { token: 'keyword.directive.hlsl', foreground: '89DDFF' },
-      { token: 'type.glsl', foreground: 'FFCB6B' },
-      { token: 'type.hlsl', foreground: 'FFCB6B' },
-      { token: 'type.identifier.glsl', foreground: '82AAFF' },
-      { token: 'type.identifier.hlsl', foreground: '82AAFF' },
-      { token: 'comment.glsl', foreground: '6A7B68', fontStyle: 'italic' },
-      { token: 'comment.hlsl', foreground: '6A7B68', fontStyle: 'italic' }
-    ],
-    colors: {
-      'editor.background': '#11151B',
-      'editor.foreground': '#D7DCE5',
-      'editor.lineHighlightBackground': '#171D26',
-      'editorCursor.foreground': '#7AA2F7',
-      'editor.selectionBackground': '#29436A',
-      'editorLineNumber.foreground': '#505866',
-      'editorLineNumber.activeForeground': '#9AA5B5',
-      'editorIndentGuide.background1': '#232A35',
-      'editorIndentGuide.activeBackground1': '#394354'
-    }
-  })
+  applyEditorTheme(colors)
 }
 
 export { monaco }

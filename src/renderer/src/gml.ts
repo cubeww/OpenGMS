@@ -1,5 +1,8 @@
 import type * as Monaco from 'monaco-editor/editor/editor.api'
 import type { Project, ProjectItem, ResourceType } from '../../shared/types'
+import { parseScriptInfo } from '../../shared/script'
+import { codeBuffer } from './codeReveal'
+import { projectGmlSources } from './codeSearch'
 import { gmlFunctions, type GmlFunction } from './gmlBuiltins'
 import { gmlConstants, gmlVariables } from './gmlSymbols'
 import { useApp } from './store'
@@ -25,6 +28,7 @@ type Call = {
 export type GmlResourceTarget = {
   name: string
   detail: string
+  kind: ProjectSymbol['type']
   range: Monaco.IRange
 }
 
@@ -34,9 +38,34 @@ type ResourceTargetCache = {
   targets: GmlResourceTarget[]
 }
 
+type EnumMember = {
+  name: string
+  value: string
+  start: number
+  end: number
+}
+
+type GmlEnum = {
+  name: string
+  start: number
+  end: number
+  members: EnumMember[]
+}
+
+type EnumSource = {
+  key: string
+  label: string
+  enums: GmlEnum[]
+  model?: Monaco.editor.ITextModel
+}
+
+type EnumSymbol = GmlEnum & {
+  source: EnumSource
+}
+
 const keywords = [
   'begin', 'break', 'case', 'continue', 'default', 'do', 'else', 'end', 'exit',
-  'for', 'globalvar', 'if', 'repeat', 'return', 'switch', 'then', 'until', 'var',
+  'enum', 'for', 'globalvar', 'if', 'repeat', 'return', 'switch', 'then', 'until', 'var',
   'while', 'with'
 ]
 
@@ -55,11 +84,86 @@ const snippets = [
   { label: 'repeat', detail: 'Repeat loop', text: 'repeat (${1:count}) {\n\t$0\n}' },
   { label: 'with', detail: 'With block', text: 'with (${1:object}) {\n\t$0\n}' },
   { label: 'switch', detail: 'Switch statement', text: 'switch (${1:value}) {\n\tcase ${2:value}:\n\t\t$0\n\t\tbreak;\n\tdefault:\n\t\tbreak;\n}' },
+  { label: 'enum', detail: 'Enum declaration', text: 'enum ${1:Name} {\n\t${2:Member}\n}\n$0' },
   { label: 'description', detail: 'Script description', text: '/// @description ${1:Description}\n$0' }
 ]
 
-const functionByName = new Map(gmlFunctions.map((item) => [item.name, item]))
+const hiddenFunctions: GmlFunction[] = [
+  {
+    name: 'variable_global_exists',
+    signature: 'variable_global_exists(name)',
+    description: 'Returns whether a global variable with the given name exists.',
+    category: 'Variables'
+  },
+  {
+    name: 'variable_global_get',
+    signature: 'variable_global_get(name)',
+    description: 'Returns the value of a global variable by name.',
+    category: 'Variables'
+  },
+  {
+    name: 'variable_global_set',
+    signature: 'variable_global_set(name, value)',
+    description: 'Sets the value of a global variable by name.',
+    category: 'Variables'
+  },
+  {
+    name: 'variable_instance_exists',
+    signature: 'variable_instance_exists(id, name)',
+    description: 'Returns whether an instance variable with the given name exists.',
+    category: 'Variables'
+  },
+  {
+    name: 'variable_instance_get',
+    signature: 'variable_instance_get(id, name)',
+    description: 'Returns the value of an instance variable by name.',
+    category: 'Variables'
+  },
+  {
+    name: 'variable_instance_get_names',
+    signature: 'variable_instance_get_names(id)',
+    description: 'Returns the names of the variables defined on an instance.',
+    category: 'Variables'
+  },
+  {
+    name: 'variable_instance_set',
+    signature: 'variable_instance_set(id, name, value)',
+    description: 'Sets the value of an instance variable by name.',
+    category: 'Variables'
+  }
+]
+
+function expandedFunctions(): GmlFunction[] {
+  const result = new Map<string, GmlFunction>()
+  for (const item of [...gmlFunctions, ...hiddenFunctions]) result.set(item.name, item)
+
+  const spellings = [
+    ['colour', 'color'],
+    ['normalised', 'normalized']
+  ] as const
+  for (const item of [...result.values()]) {
+    for (const [source, target] of spellings) {
+      if (!item.name.includes(source)) continue
+      const name = item.name.replaceAll(source, target)
+      if (result.has(name)) continue
+      result.set(name, {
+        ...item,
+        name,
+        signature: item.signature.replaceAll(source, target)
+      })
+    }
+  }
+
+  return [...result.values()]
+}
+
+const builtInFunctions = expandedFunctions()
+const functionByName = new Map(builtInFunctions.map((item) => [item.name, item]))
 const projectCache = new WeakMap<Project, ProjectSymbol[]>()
+const enumCache = new WeakMap<Project, Promise<Map<string, EnumSource>>>()
+let enumModelProject: Project | null = null
+let enumModelVersion = ''
+let enumModelCache: Promise<Map<string, EnumSymbol>> | null = null
 const resourceTargetCache = new WeakMap<Monaco.editor.ITextModel, ResourceTargetCache>()
 
 const resourceOpenEvents: Partial<Record<ResourceType, string>> = {
@@ -79,6 +183,293 @@ const resourceOpenEvents: Partial<Record<ResourceType, string>> = {
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function codeMask(source: string): string {
+  const result = source.split('')
+  let quote = ''
+  let lineComment = false
+  let blockComment = false
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index]
+    const next = source[index + 1]
+
+    if (lineComment) {
+      if (char === '\n' || char === '\r') lineComment = false
+      else result[index] = ' '
+      continue
+    }
+    if (blockComment) {
+      if (char === '*' && next === '/') {
+        result[index] = ' '
+        result[index + 1] = ' '
+        blockComment = false
+        index += 1
+      } else if (char !== '\n' && char !== '\r') result[index] = ' '
+      continue
+    }
+    if (quote) {
+      if (char === '\\') {
+        result[index] = ' '
+        if (index + 1 < result.length) result[index + 1] = ' '
+        index += 1
+      } else {
+        if (char === quote) quote = ''
+        if (char !== '\n' && char !== '\r') result[index] = ' '
+      }
+      continue
+    }
+    if (char === '/' && next === '/') {
+      result[index] = ' '
+      result[index + 1] = ' '
+      lineComment = true
+      index += 1
+      continue
+    }
+    if (char === '/' && next === '*') {
+      result[index] = ' '
+      result[index + 1] = ' '
+      blockComment = true
+      index += 1
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+      result[index] = ' '
+    }
+  }
+
+  return result.join('')
+}
+
+function closingBrace(mask: string, start: number): number {
+  let depth = 0
+  for (let index = start; index < mask.length; index += 1) {
+    if (mask[index] === '{') depth += 1
+    else if (mask[index] === '}') {
+      depth -= 1
+      if (depth === 0) return index
+    }
+  }
+  return -1
+}
+
+function closingEnd(mask: string, start: number): number {
+  const token = /\b(begin|end)\b/g
+  token.lastIndex = start
+  let depth = 0
+  let match: RegExpExecArray | null
+  while ((match = token.exec(mask))) {
+    if (match[1] === 'begin') depth += 1
+    else {
+      depth -= 1
+      if (depth === 0) return match.index
+    }
+  }
+  return -1
+}
+
+function enumMembers(source: string, mask: string, start: number, end: number): EnumMember[] {
+  const members: EnumMember[] = []
+  let part = start
+  let round = 0
+  let square = 0
+  let curly = 0
+
+  function add(partEnd: number): void {
+    const masked = mask.slice(part, partEnd)
+    const match = masked.match(/^\s*([a-zA-Z_]\w*)/)
+    if (!match || match.index === undefined) return
+    const name = match[1]
+    const memberStart = part + match.index + match[0].lastIndexOf(name)
+    const restStart = memberStart + name.length
+    const equals = mask.slice(restStart, partEnd).indexOf('=')
+    members.push({
+      name,
+      value: equals < 0 ? '' : source.slice(restStart + equals + 1, partEnd).trim(),
+      start: memberStart,
+      end: memberStart + name.length
+    })
+  }
+
+  for (let index = start; index < end; index += 1) {
+    const char = mask[index]
+    if (char === '(') round += 1
+    else if (char === ')') round = Math.max(0, round - 1)
+    else if (char === '[') square += 1
+    else if (char === ']') square = Math.max(0, square - 1)
+    else if (char === '{') curly += 1
+    else if (char === '}') curly = Math.max(0, curly - 1)
+    else if (char === ',' && round === 0 && square === 0 && curly === 0) {
+      add(index)
+      part = index + 1
+    }
+  }
+  add(end)
+  return members
+}
+
+function parseEnums(source: string): GmlEnum[] {
+  const mask = codeMask(source)
+  const result: GmlEnum[] = []
+  const declaration = /\benum\s+([a-zA-Z_]\w*)\s*(\{|begin\b)/g
+  let match: RegExpExecArray | null
+
+  while ((match = declaration.exec(mask))) {
+    const name = match[1]
+    const nameStart = match.index + match[0].indexOf(name, 4)
+    const opener = match.index + match[0].lastIndexOf(match[2])
+    const close = match[2] === '{'
+      ? closingBrace(mask, opener)
+      : closingEnd(mask, opener)
+    if (close < 0) continue
+
+    const bodyStart = opener + match[2].length
+    result.push({
+      name,
+      start: nameStart,
+      end: nameStart + name.length,
+      members: enumMembers(source, mask, bodyStart, close)
+    })
+    declaration.lastIndex = match[2] === '{' ? close + 1 : close + 3
+  }
+
+  return result
+}
+
+function modelSourceKey(model: Monaco.editor.ITextModel): string {
+  const path = model.uri.path.replace(/^\//, '').replace(/\.gml$/i, '')
+  try {
+    return decodeURIComponent(path)
+  } catch {
+    return path
+  }
+}
+
+function projectEnums(project: Project): Promise<Map<string, EnumSource>> {
+  const cached = enumCache.get(project)
+  if (cached) return cached
+  const loading = projectGmlSources(project).then((sources) => new Map(
+    sources.map((source) => [source.key, {
+      key: source.key,
+      label: `${source.resourceName} · ${source.section}`,
+      enums: parseEnums(source.code)
+    }])
+  )).catch(() => new Map<string, EnumSource>())
+  enumCache.set(project, loading)
+  return loading
+}
+
+async function enumSymbols(api: MonacoApi): Promise<Map<string, EnumSymbol>> {
+  const project = useApp.getState().project
+  const models = api.editor.getModels().filter((model) => model.getLanguageId() === 'gml')
+  const version = models.map((model) => `${model.uri.toString()}:${model.getVersionId()}`).join('|')
+  if (enumModelCache && enumModelProject === project && enumModelVersion === version) return enumModelCache
+
+  enumModelProject = project
+  enumModelVersion = version
+  enumModelCache = (async () => {
+    const sources = project ? new Map(await projectEnums(project)) : new Map<string, EnumSource>()
+    for (const model of models) {
+      const key = modelSourceKey(model)
+      sources.set(key, {
+        key,
+        label: key,
+        enums: parseEnums(model.getValue()),
+        model
+      })
+    }
+
+    const result = new Map<string, EnumSymbol>()
+    for (const source of sources.values()) {
+      for (const item of source.enums) result.set(item.name, { ...item, source })
+    }
+    return result
+  })()
+  return enumModelCache
+}
+
+function memberText(item: EnumMember): string {
+  return item.value ? `${item.name} = ${item.value}` : item.name
+}
+
+function memberContext(
+  model: Monaco.editor.ITextModel,
+  position: Monaco.Position
+): { enumName: string; memberName: string } | null {
+  const offset = model.getOffsetAt(position)
+  const source = codeMask(model.getValue())
+  const word = model.getWordAtPosition(position)
+  const end = word && position.column >= word.startColumn && position.column <= word.endColumn
+    ? model.getOffsetAt({ lineNumber: position.lineNumber, column: word.endColumn })
+    : offset
+  const before = source.slice(Math.max(0, end - 1000), end)
+  const match = before.match(/\b([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)?$/)
+  if (!match) return null
+  return { enumName: match[1], memberName: match[2] ?? '' }
+}
+
+function localEnumMember(model: Monaco.editor.ITextModel, position: Monaco.Position): {
+  item: GmlEnum
+  member: EnumMember
+} | null {
+  const offset = model.getOffsetAt(position)
+  for (const item of parseEnums(model.getValue())) {
+    const member = item.members.find((candidate) => offset >= candidate.start && offset <= candidate.end)
+    if (member) return { item, member }
+  }
+  return null
+}
+
+function enumRange(model: Monaco.editor.ITextModel, start: number, end: number): Monaco.IRange {
+  const from = model.getPositionAt(start)
+  const to = model.getPositionAt(end)
+  return {
+    startLineNumber: from.lineNumber,
+    startColumn: from.column,
+    endLineNumber: to.lineNumber,
+    endColumn: to.column
+  }
+}
+
+export async function gmlEnumDecorations(
+  api: MonacoApi,
+  model: Monaco.editor.ITextModel
+): Promise<Monaco.editor.IModelDeltaDecoration[]> {
+  const symbols = await enumSymbols(api)
+  const source = model.getValue()
+  const mask = codeMask(source)
+  const result: Monaco.editor.IModelDeltaDecoration[] = []
+  const used = new Set<string>()
+
+  function add(start: number, end: number, className: string): void {
+    const key = `${start}:${end}:${className}`
+    if (used.has(key)) return
+    used.add(key)
+    result.push({
+      range: enumRange(model, start, end),
+      options: { inlineClassName: className, inlineClassNameAffectsLetterSpacing: false }
+    })
+  }
+
+  for (const item of parseEnums(source)) {
+    add(item.start, item.end, 'gml-enum-name')
+    item.members.forEach((member) => add(member.start, member.end, 'gml-enum-member'))
+  }
+
+  const reference = /\b([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)/g
+  let match: RegExpExecArray | null
+  while ((match = reference.exec(mask))) {
+    const item = symbols.get(match[1])
+    if (!item || !item.members.some((member) => member.name === match![2])) continue
+    const enumStart = match.index
+    const memberStart = match.index + match[0].lastIndexOf(match[2])
+    add(enumStart, enumStart + match[1].length, 'gml-enum-name')
+    add(memberStart, memberStart + match[2].length, 'gml-enum-member')
+  }
+
+  return result
 }
 
 function parameters(name: string, signature: string): string[] {
@@ -125,7 +516,7 @@ function resourceDetail(type: ResourceType): string {
 function projectSymbols(project: Project | null): ProjectSymbol[] {
   if (!project) return []
   const cached = projectCache.get(project)
-  if (cached) return cached
+  if (cached) return liveScriptSymbols(cached)
 
   const symbols = new Map<string, ProjectSymbol>()
   const add = (symbol: ProjectSymbol): void => {
@@ -179,7 +570,22 @@ function projectSymbols(project: Project | null): ProjectSymbol[] {
   project.groups.forEach((group) => group.items.forEach(visit))
   const result = [...symbols.values()]
   projectCache.set(project, result)
-  return result
+  return liveScriptSymbols(result)
+}
+
+function liveScriptSymbols(symbols: ProjectSymbol[]): ProjectSymbol[] {
+  return symbols.map((symbol) => {
+    const resource = symbol.resource
+    if (resource?.type !== 'script') return symbol
+    const source = codeBuffer(resource.file)
+    if (source === undefined) return symbol
+    const info = parseScriptInfo(resource.name, source)
+    return {
+      ...symbol,
+      signature: info.signature,
+      description: info.description || resource.path
+    }
+  })
 }
 
 export function openGmlResource(name: string): boolean {
@@ -209,7 +615,10 @@ function resourceTargets(model: Monaco.editor.ITextModel): GmlResourceTarget[] {
     return []
   }
 
-  const shadowed = new Set(localNames(model).map((item) => item.name))
+  const shadowed = new Set([
+    ...localNames(model).map((item) => item.name),
+    ...parseEnums(model.getValue()).map((item) => item.name)
+  ])
   const targets: GmlResourceTarget[] = []
   let blockComment = false
 
@@ -269,11 +678,14 @@ function resourceTargets(model: Monaco.editor.ITextModel): GmlResourceTarget[] {
       while (/\w/.test(line[index] ?? '')) index += 1
       const name = line.slice(start, index)
       const symbol = symbols.get(name)
-      if (!symbol || shadowed.has(name)) continue
+      const before = line.slice(0, start).trimEnd().at(-1)
+      const after = line.slice(index).trimStart()[0]
+      if (!symbol || shadowed.has(name) || before === '.' || after === '.') continue
 
       targets.push({
         name,
         detail: symbol.detail,
+        kind: symbol.type,
         range: {
           startLineNumber: lineNumber,
           startColumn: start + 1,
@@ -297,6 +709,18 @@ export function gmlResourceAt(
     position.column >= target.range.startColumn &&
     position.column < target.range.endColumn
   )) ?? null
+}
+
+export function gmlResourceDecorations(
+  model: Monaco.editor.ITextModel
+): Monaco.editor.IModelDeltaDecoration[] {
+  return resourceTargets(model).filter((target) => target.kind === 'resource').map((target) => ({
+    range: target.range,
+    options: {
+      inlineClassName: 'gml-resource-name',
+      inlineClassNameAffectsLetterSpacing: false
+    }
+  }))
 }
 
 function localNames(model: Monaco.editor.ITextModel): Array<{ name: string; detail: string }> {
@@ -456,7 +880,7 @@ export function registerGml(api: MonacoApi): void {
     wordOperators,
     constants,
     variables: builtInVariables,
-    builtins: gmlFunctions.map((item) => item.name),
+    builtins: builtInFunctions.map((item) => item.name),
     tokenizer: {
       root: [
         [/\/\/\/.*$/, 'comment.doc'],
@@ -468,6 +892,7 @@ export function registerGml(api: MonacoApi): void {
         [/\d+([eE][-+]?\d+)?/, 'number'],
         [/[a-zA-Z_]\w*(?=\s*\()/, {
           cases: {
+            '@keywords': 'keyword',
             '@builtins': 'builtin.function',
             '@default': 'function'
           }
@@ -507,7 +932,7 @@ export function registerGml(api: MonacoApi): void {
     }
   })
 
-  const functionItems = gmlFunctions.map((item) => ({
+  const functionItems = builtInFunctions.map((item) => ({
     label: item.name,
     kind: api.languages.CompletionItemKind.Function,
     detail: item.signature,
@@ -524,7 +949,7 @@ export function registerGml(api: MonacoApi): void {
 
   api.languages.registerCompletionItemProvider('gml', {
     triggerCharacters: ['.'],
-    provideCompletionItems(model, position) {
+    async provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
       const range = new api.Range(
         position.lineNumber,
@@ -532,6 +957,23 @@ export function registerGml(api: MonacoApi): void {
         position.lineNumber,
         word.endColumn
       )
+      const enums = await enumSymbols(api)
+      const context = memberContext(model, position)
+      const enumItem = context ? enums.get(context.enumName) : undefined
+      if (enumItem) {
+        return {
+          suggestions: enumItem.members.map((member) => ({
+            label: member.name,
+            kind: api.languages.CompletionItemKind.EnumMember,
+            detail: `${enumItem.name}.${memberText(member)}`,
+            documentation: `GML enum member · ${enumItem.source.label}`,
+            insertText: member.name,
+            sortText: `0_${member.name}`,
+            range
+          }))
+        }
+      }
+
       const suggestions: Monaco.languages.CompletionItem[] = functionItems.map((item) => ({
         ...item,
         range
@@ -554,6 +996,18 @@ export function registerGml(api: MonacoApi): void {
           label: item.name,
           kind: api.languages.CompletionItemKind.Variable,
           detail: item.detail,
+          insertText: item.name,
+          sortText: `1_${item.name}`,
+          range
+        })
+      }
+
+      for (const item of enums.values()) {
+        suggestions.push({
+          label: item.name,
+          kind: api.languages.CompletionItemKind.Enum,
+          detail: `enum ${item.name}`,
+          documentation: `${item.members.length} members · ${item.source.label}`,
           insertText: item.name,
           sortText: `1_${item.name}`,
           range
@@ -641,14 +1095,85 @@ export function registerGml(api: MonacoApi): void {
     }
   })
 
-  api.languages.registerHoverProvider('gml', {
-    provideHover(model, position) {
+  api.languages.registerDefinitionProvider('gml', {
+    async provideDefinition(model, position) {
       const word = model.getWordAtPosition(position)
       if (!word) return null
+      const local = localEnumMember(model, position)
+      if (local) {
+        return {
+          uri: model.uri,
+          range: enumRange(model, local.member.start, local.member.end)
+        }
+      }
+
+      const enums = await enumSymbols(api)
+      const context = memberContext(model, position)
+      const item = context ? enums.get(context.enumName) : enums.get(word.word)
+      const sourceModel = item?.source.model
+      if (!item || !sourceModel) return null
+      const member = context
+        ? item.members.find((candidate) => candidate.name === word.word)
+        : undefined
+      return {
+        uri: sourceModel.uri,
+        range: enumRange(
+          sourceModel,
+          member?.start ?? item.start,
+          member?.end ?? item.end
+        )
+      }
+    }
+  })
+
+  api.languages.registerHoverProvider('gml', {
+    async provideHover(model, position) {
+      const word = model.getWordAtPosition(position)
+      if (!word) return null
+      const range = new api.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn)
+      const enums = await enumSymbols(api)
+      const context = memberContext(model, position)
+      const enumItem = context ? enums.get(context.enumName) : undefined
+      const enumMember = enumItem?.members.find((member) => member.name === word.word)
+      const declaredMember = localEnumMember(model, position)
+
+      if (enumItem && enumMember) {
+        return {
+          range,
+          contents: [
+            { value: `\`${enumItem.name}.${memberText(enumMember)}\`` },
+            { value: `GML enum member · ${enumItem.source.label}` }
+          ]
+        }
+      }
+      if (declaredMember) {
+        return {
+          range,
+          contents: [
+            { value: `\`${declaredMember.item.name}.${memberText(declaredMember.member)}\`` },
+            { value: 'GML enum member' }
+          ]
+        }
+      }
+
+      const declaredEnum = enums.get(word.word)
+      if (declaredEnum) {
+        const preview = declaredEnum.members.slice(0, 12).map((member) => memberText(member)).join(', ')
+        const remaining = Math.max(0, declaredEnum.members.length - 12)
+        return {
+          range,
+          contents: [
+            { value: `\`enum ${declaredEnum.name}\`` },
+            { value: `${declaredEnum.members.length} members · ${declaredEnum.source.label}` },
+            ...(preview ? [{ value: `${preview}${remaining ? `, … (+${remaining})` : ''}` }] : [])
+          ]
+        }
+      }
+
       const item = functionByName.get(word.word) ?? projectFunction(word.word)
       if (item) {
         return {
-          range: new api.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn),
+          range,
           contents: [
             { value: `\`${item.signature}\`` },
             { value: item.description },
@@ -660,7 +1185,7 @@ export function registerGml(api: MonacoApi): void {
       const symbol = projectSymbols(useApp.getState().project).find((entry) => entry.name === word.word)
       if (!symbol) return null
       return {
-        range: new api.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn),
+        range,
         contents: [
           { value: `**${symbol.name}**` },
           { value: symbol.detail },

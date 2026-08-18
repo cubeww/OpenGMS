@@ -14,6 +14,7 @@ import {
   Map,
   Plus,
   Settings2,
+  SquarePen,
   Trash2,
   X,
   type LucideIcon
@@ -636,6 +637,10 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
 
   function objectsPage(): React.JSX.Element {
     const image = selectedObjectItem?.image ? assetUrl(selectedObjectItem.image, params.projectPath, imageVersion) : ''
+    const editObject = (): void => {
+      if (!selectedObjectItem) return
+      window.dispatchEvent(new CustomEvent('opengms:open-object', { detail: selectedObjectItem }))
+    }
     return (
       <>
         <Group title={selected ? 'Selected instance' : 'Object placement'}>
@@ -646,7 +651,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
           <div className="room-field-grid"><Field label="Scale X" value={currentTransform.scaleX} step={0.1} onChange={(scaleX) => patchTransform({ scaleX })} /><Field label="Scale Y" value={currentTransform.scaleY} step={0.1} onChange={(scaleY) => patchTransform({ scaleY })} /></div>
           <div className="room-color-row"><label className="room-color-field"><span>Colour</span><input type="color" value={hexColor(currentTransform.color)} onChange={(event) => patchTransform({ color: roomColor(event.target.value, currentAlpha) })} /></label><Field label="Alpha" value={currentAlpha} min={0} max={255} onChange={(alpha) => patchTransform({ color: roomColor(hexColor(currentTransform.color), Math.max(0, Math.min(255, alpha))) })} /></div>
           <div className="room-button-row"><button onClick={() => patchTransform({ scaleX: -currentTransform.scaleX })}>Flip X</button><button onClick={() => patchTransform({ scaleY: -currentTransform.scaleY })}>Flip Y</button></div>
-          {selected && <button className="room-wide-button" onClick={() => setInstanceCode(selected.name)}><Braces size={14} /> Creation Code</button>}
+          {selected && <div className="room-button-row"><button onClick={editObject} disabled={!selectedObjectItem}><SquarePen size={14} /> Edit Object</button><button onClick={() => setInstanceCode(selected.name)}><Braces size={14} /> Creation Code</button></div>}
           {selected && <button className="room-wide-button danger" onClick={() => deleteInstance(selected.name)}><Trash2 size={14} /> Delete selected</button>}
         </Group>
         <Group title="Object to add with left mouse">

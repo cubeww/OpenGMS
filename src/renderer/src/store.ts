@@ -10,6 +10,7 @@ import type {
   Project,
   ProjectItem,
   RoomData,
+  ScriptInfo,
   ShaderData,
   SoundData,
   SpriteData,
@@ -47,6 +48,7 @@ type AppState = {
   updateTimeline: (id: string, timeline: TimelineData) => void
   updatePath: (id: string, pathData: PathData) => void
   updateRoom: (id: string, room: RoomData) => void
+  updateScript: (id: string, script: ScriptInfo) => void
   updateExtension: (id: string, extension: ExtensionData) => void
   updateMacro: (id: string, macro: MacroData) => void
   updateShader: (id: string, shader: ShaderData) => void
@@ -73,6 +75,7 @@ function updateItems(
     timeline?: TimelineData
     pathData?: PathData
     room?: RoomData
+    script?: ScriptInfo
     shader?: ShaderData
     extension?: ExtensionData
     macro?: MacroData
@@ -388,6 +391,18 @@ export const useApp = create<AppState>((set, get) => ({
             groups: state.project.groups.map((group) => ({
               ...group,
               items: updateItems(group.items, id, { room })
+            }))
+          }
+        : null
+    })),
+  updateScript: (id, script) =>
+    set((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            groups: state.project.groups.map((group) => ({
+              ...group,
+              items: updateItems(group.items, id, { script })
             }))
           }
         : null

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Braces, RotateCcw, Settings2, Type } from 'lucide-react'
+import { Braces, Palette, RotateCcw, Settings2, Type } from 'lucide-react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import {
   codeFontFamily,
@@ -7,7 +7,25 @@ import {
   updateEditorSettings,
   useEditorSettings
 } from '../editorSettings'
+import type { EditorColors } from '../editorSettings'
 import { FontPicker } from '../FontPicker'
+
+const colorFields: Array<{ key: keyof EditorColors; label: string }> = [
+  { key: 'text', label: 'Plain text' },
+  { key: 'keyword', label: 'Keywords' },
+  { key: 'operator', label: 'Operators' },
+  { key: 'builtInFunction', label: 'Built-in functions' },
+  { key: 'function', label: 'Script functions' },
+  { key: 'resource', label: 'Resource names' },
+  { key: 'variable', label: 'Built-in variables' },
+  { key: 'constant', label: 'Constants' },
+  { key: 'string', label: 'Strings' },
+  { key: 'number', label: 'Numbers' },
+  { key: 'comment', label: 'Comments' },
+  { key: 'docComment', label: 'Documentation comments' },
+  { key: 'enumName', label: 'Enum names' },
+  { key: 'enumMember', label: 'Enum members' }
+]
 
 function NumberField({
   value,
@@ -45,6 +63,55 @@ function NumberField({
         if (event.key === 'Enter') event.currentTarget.blur()
       }}
     />
+  )
+}
+
+function ColorField({
+  label,
+  value,
+  onChange
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+}): React.JSX.Element {
+  const [text, setText] = useState(value)
+
+  useEffect(() => setText(value), [value])
+
+  function commit(): void {
+    const next = text.trim().toUpperCase()
+    if (!/^#[0-9A-F]{6}$/.test(next)) {
+      setText(value)
+      return
+    }
+    setText(next)
+    onChange(next)
+  }
+
+  return (
+    <label className="preferences-color">
+      <span>{label}</span>
+      <div>
+        <input
+          type="color"
+          value={value}
+          aria-label={`${label} color`}
+          onChange={(event) => onChange(event.target.value.toUpperCase())}
+        />
+        <input
+          type="text"
+          value={text}
+          maxLength={7}
+          spellCheck={false}
+          onChange={(event) => setText(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.currentTarget.blur()
+          }}
+        />
+      </div>
+    </label>
   )
 }
 
@@ -144,14 +211,40 @@ export function PreferencesPanel({ api }: IDockviewPanelProps): React.JSX.Elemen
             </div>
           </section>
 
+          <section className="preferences-section">
+            <header><Palette size={18} /><div><h2>Syntax Colors</h2><p>Customize GML and shader highlighting. Changes appear immediately in open editors.</p></div></header>
+            <div className="preferences-colors">
+              {colorFields.map((item) => (
+                <ColorField
+                  key={item.key}
+                  label={item.label}
+                  value={settings.colors[item.key]}
+                  onChange={(color) => updateEditorSettings({
+                    colors: { ...settings.colors, [item.key]: color }
+                  })}
+                />
+              ))}
+            </div>
+          </section>
+
           <section className="preferences-preview">
             <span>Preview</span>
             <pre style={{
               fontFamily: codeFontFamily(settings.fontFamily, settings.fontFallback),
               fontSize: `${settings.fontSize}px`,
               lineHeight: `${settings.lineHeight}px`,
-              fontVariantLigatures: settings.fontLigatures ? 'normal' : 'none'
-            }}><code><i>/// Create player state</i>{'\n'}<b>var</b> speed = <em>4</em>;{'\n'}x += lengthdir_x(speed, direction);</code></pre>
+              fontVariantLigatures: settings.fontLigatures ? 'normal' : 'none',
+              color: settings.colors.text
+            }}><code>
+                <span style={{ color: settings.colors.docComment, fontStyle: 'italic' }}>/// move_player(x pos, y pos, [relative])</span>{'\n'}
+                <span style={{ color: settings.colors.keyword }}>var</span>{' speed '}<span style={{ color: settings.colors.operator }}>=</span>{' '}<span style={{ color: settings.colors.number }}>4</span>;{'\n'}
+                <span style={{ color: settings.colors.variable }}>x</span>{' '}<span style={{ color: settings.colors.operator }}>+=</span>{' '}<span style={{ color: settings.colors.builtInFunction }}>lengthdir_x</span>(speed, <span style={{ color: settings.colors.variable }}>direction</span>);{'\n'}
+                {'state '}<span style={{ color: settings.colors.operator }}>=</span>{' '}<span style={{ color: settings.colors.enumName }}>PlayerState</span>.<span style={{ color: settings.colors.enumMember }}>Move</span>;{'\n'}
+                <span style={{ color: settings.colors.builtInFunction }}>instance_create</span>(<span style={{ color: settings.colors.variable }}>x</span>, y, <span style={{ color: settings.colors.resource }}>objPlayer</span>);{'\n'}
+                <span style={{ color: settings.colors.builtInFunction }}>draw_set_color</span>(<span style={{ color: settings.colors.constant }}>c_white</span>);{'\n'}
+                <span style={{ color: settings.colors.function }}>move_player</span>(<span style={{ color: settings.colors.variable }}>x</span>, y, <span style={{ color: settings.colors.constant }}>true</span>);{' '}<span style={{ color: settings.colors.comment, fontStyle: 'italic' }}>// Update position</span>{'\n'}
+                <span style={{ color: settings.colors.builtInFunction }}>show_debug_message</span>(<span style={{ color: settings.colors.string }}>&quot;Ready&quot;</span>);
+              </code></pre>
           </section>
         </main>
       </div>

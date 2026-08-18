@@ -1831,6 +1831,53 @@ select:focus-visible {
   font-size: 10px;
 }
 
+.preferences-colors {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(145px, 1fr));
+  gap: 13px;
+  padding: 16px 17px 18px;
+}
+
+.preferences-color {
+  display: grid;
+  gap: 6px;
+  color: #8d99a8;
+  font-size: 10.5px;
+}
+
+.preferences-color > div {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 6px;
+}
+
+.preferences-color input {
+  height: 30px;
+  min-width: 0;
+  border: 1px solid #344252;
+  border-radius: 5px;
+  outline: none;
+  color: #d9e0e8;
+  background: #0d1319;
+}
+
+.preferences-color input[type="color"] {
+  width: 34px;
+  padding: 3px;
+  cursor: pointer;
+}
+
+.preferences-color input[type="text"] {
+  width: 100%;
+  padding: 0 7px;
+  font: 11px "Cascadia Mono", monospace;
+  text-transform: uppercase;
+}
+
+.preferences-color input:focus {
+  border-color: #4f83b7;
+}
+
 .preferences-preview {
   overflow: hidden;
 }
@@ -1872,6 +1919,21 @@ select:focus-visible {
 
 .preferences-preview em {
   color: #9b83d5;
+}
+
+@media (max-width: 900px) {
+  .preferences-body {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+
+  .preferences-content {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .preferences-colors {
+    grid-template-columns: repeat(2, minmax(135px, 1fr));
+  }
 }
 
 .sprite-editor,
@@ -2839,9 +2901,20 @@ select:focus-visible {
 }
 
 .monaco-editor .gml-resource-link {
-  color: var(--vscode-editorLink-activeForeground) !important;
   text-decoration: underline;
   cursor: pointer;
+}
+
+.monaco-editor .gml-resource-name {
+  color: var(--gml-resource-name, #e6a96b) !important;
+}
+
+.monaco-editor .gml-enum-name {
+  color: var(--gml-enum-name, #80cbc4) !important;
+}
+
+.monaco-editor .gml-enum-member {
+  color: var(--gml-enum-member, #ffcb6b) !important;
 }
 
 .monaco-overflow-root.monaco-editor {
@@ -5656,7 +5729,7 @@ select:focus-visible {
 
 .room-editor-body {
   display: grid;
-  grid-template-columns: 306px minmax(0, 1fr);
+  grid-template-columns: 284px minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -6265,7 +6338,7 @@ select:focus-visible {
   }
 
   .room-editor-body {
-    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-columns: 248px minmax(0, 1fr);
   }
 
   .room-toolbar label {

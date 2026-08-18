@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Braces } from 'lucide-react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { CodeFile, ProjectItem } from '../../../shared/types'
+import { parseScriptInfo } from '../../../shared/script'
 import { CodeEditor } from '../CodeEditor'
 import { requestCodeReveal } from '../codeReveal'
 import { listenSearchReveal } from '../codeSearch'
@@ -29,6 +30,7 @@ export function ScriptPanel({ params, api }: IDockviewPanelProps<ScriptParams>):
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const addLog = useApp((state) => state.addLog)
+  const updateScript = useApp((state) => state.updateScript)
   const dirty = code ? code.text !== saved : false
   useSave(api.id, dirty, save)
 
@@ -77,6 +79,7 @@ export function ScriptPanel({ params, api }: IDockviewPanelProps<ScriptParams>):
     setSaving(true)
     try {
       await window.openGms.saveScript(params.item.file, next)
+      updateScript(params.item.id, parseScriptInfo(params.item.name, next.text))
       setSaved(next.text)
       addLog(`Saved script ${params.item.name}.`)
     } catch (reason) {

@@ -15,8 +15,14 @@ import {
   setCodeBuffer
 } from './codeReveal'
 import { codeFontFamily, useEditorSettings } from './editorSettings'
-import { gmlResourceAt, openGmlResource } from './gml'
-import { monaco, setupMonaco } from './monaco'
+import {
+  gmlEnumDecorations,
+  gmlResourceAt,
+  gmlResourceDecorations,
+  openGmlResource
+} from './gml'
+import { applyEditorTheme, monaco, setupMonaco } from './monaco'
+import { useApp } from './store'
 
 type CodeEditorProps = {
   id: string
@@ -49,6 +55,8 @@ export function CodeEditor({
   const modelRef = useRef<monaco.editor.ITextModel | null>(null)
   const valueRef = useRef(value)
   const changeRef = useRef(onChange)
+  const localValueRef = useRef<string | null>(null)
+  const syncingRef = useRef(false)
   const settings = useEditorSettings()
   const [cursor, setCursor] = useState<Cursor>({ line: 1, column: 1 })
   const [lines, setLines] = useState(1)
@@ -64,7 +72,7 @@ export function CodeEditor({
     const host = hostRef.current
     if (!host) return
 
-    setupMonaco()
+    setupMonaco(settings.colors)
     const overflowRoot = document.createElement('div')
     overflowRoot.className = 'monaco-overflow-root monaco-editor vs-dark'
     document.body.appendChild(overflowRoot)
@@ -131,7 +139,10 @@ export function CodeEditor({
     const content = editor.onDidChangeModelContent(() => {
       const next = model.getValue()
       setCodeBuffer(id, next)
-      changeRef.current(next)
+      if (!syncingRef.current) {
+        localValueRef.current = next
+        changeRef.current(next)
+      }
       setLines(model.getLineCount())
       setCanUndo(model.canUndo())
       setCanRedo(model.canRedo())
@@ -140,7 +151,52 @@ export function CodeEditor({
       setCursor({ line: event.position.lineNumber, column: event.position.column })
     })
     const resourceLink = editor.createDecorationsCollection()
+    const resourceStyle = editor.createDecorationsCollection()
+    const enumStyle = editor.createDecorationsCollection()
+    let enumTimer = 0
+    let enumRequest = 0
+    let resourceTimer = 0
+    let disposed = false
     let hoverPosition: monaco.Position | null = null
+
+    const refreshEnums = (): void => {
+      window.clearTimeout(enumTimer)
+      enumRequest += 1
+      const request = enumRequest
+      if (language !== 'gml') {
+        enumStyle.clear()
+        return
+      }
+      enumTimer = window.setTimeout(() => {
+        void gmlEnumDecorations(monaco, model).then((decorations) => {
+          if (!disposed && request === enumRequest && !model.isDisposed()) enumStyle.set(decorations)
+        })
+      }, 60)
+    }
+
+    const enumContent = model.onDidChangeContent(() => {
+      refreshEnums()
+      window.dispatchEvent(new Event('opengms:gml-enums-changed'))
+    })
+    const enumsChanged = (): void => refreshEnums()
+    window.addEventListener('opengms:gml-enums-changed', enumsChanged)
+    refreshEnums()
+
+    const refreshResources = (): void => {
+      window.clearTimeout(resourceTimer)
+      if (language !== 'gml') {
+        resourceStyle.clear()
+        return
+      }
+      resourceTimer = window.setTimeout(() => {
+        if (!disposed && !model.isDisposed()) resourceStyle.set(gmlResourceDecorations(model))
+      }, 60)
+    }
+    const resourceContent = model.onDidChangeContent(refreshResources)
+    const stopProject = useApp.subscribe((state, previous) => {
+      if (state.project !== previous.project) refreshResources()
+    })
+    refreshResources()
 
     const showResourceLink = (targetPosition: monaco.Position | null): void => {
       if (language !== 'gml' || !targetPosition) {
@@ -209,15 +265,24 @@ export function CodeEditor({
     editor.focus()
 
     return () => {
+      disposed = true
+      window.clearTimeout(enumTimer)
+      window.clearTimeout(resourceTimer)
+      window.removeEventListener('opengms:gml-enums-changed', enumsChanged)
+      stopProject()
       stopReveal()
       content.dispose()
       position.dispose()
+      enumContent.dispose()
+      resourceContent.dispose()
       resourceMove.dispose()
       resourceLeave.dispose()
       resourceKeyDown.dispose()
       resourceKeyUp.dispose()
       resourceOpen.dispose()
       resourceLink.clear()
+      resourceStyle.clear()
+      enumStyle.clear()
       editorRef.current = null
       modelRef.current = null
       clearCodeBuffer(id)
@@ -229,7 +294,30 @@ export function CodeEditor({
 
   useEffect(() => {
     const model = modelRef.current
-    if (model && model.getValue() !== value) model.setValue(value)
+    if (!model) {
+      setCodeBuffer(id, value)
+      return
+    }
+
+    const current = model.getValue()
+    if (current === value) {
+      localValueRef.current = null
+      setCodeBuffer(id, current)
+      return
+    }
+
+    // React can briefly render an older value while Monaco is already ahead of it.
+    // Treat that value as a stale acknowledgement of local input instead of
+    // replacing the model, which would reset the cursor and undo stack.
+    if (localValueRef.current === current) return
+
+    syncingRef.current = true
+    try {
+      model.setValue(value)
+    } finally {
+      syncingRef.current = false
+    }
+    localValueRef.current = null
     setCodeBuffer(id, value)
   }, [id, value])
 
@@ -246,6 +334,7 @@ export function CodeEditor({
   useEffect(() => {
     const editor = editorRef.current
     const model = modelRef.current
+    applyEditorTheme(settings.colors)
     setWrap(settings.wordWrap)
     setMinimap(settings.minimap)
     editor?.updateOptions({
@@ -265,6 +354,7 @@ export function CodeEditor({
   function run(action: string): void {
     const editor = editorRef.current
     if (!editor) return
+    editor.focus()
     void editor.getAction(action)?.run()
   }
 
