@@ -1,6 +1,6 @@
 import type { PrefKey, Prefs } from '../../shared/types'
 
-const legacyKeys: Record<PrefKey, string> = {
+const legacyKeys: Partial<Record<PrefKey, string>> = {
   editor: 'opengms.editor-settings.v1',
   layout: 'opengms.layout.v3',
   recentProjects: 'opengms.recent-projects',

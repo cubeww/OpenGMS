@@ -9,6 +9,10 @@ import {
   protocol,
   session,
   shell,
+  type OpenDialogOptions,
+  type OpenDialogReturnValue,
+  type SaveDialogOptions,
+  type SaveDialogReturnValue,
   type Session
 } from 'electron'
 import {
@@ -55,7 +59,14 @@ import { loadObject, saveObject } from './object'
 import { saveMacros } from './macro'
 import { createProject } from './newProject'
 import { savePath } from './path'
-import { initPrefs, preparePrefs, removePref, setPref } from './prefs'
+import {
+  getDialogFolder,
+  initPrefs,
+  preparePrefs,
+  removePref,
+  setDialogFolder,
+  setPref
+} from './prefs'
 import { loadProject } from './project'
 import {
   addExistingResource as addExistingProjectResource,
@@ -89,6 +100,45 @@ let dirtyCount = 0
 let allowWindowClose = false
 let closePromptOpen = false
 let preparingQuit = false
+
+async function rememberedDialogFolder(key: string): Promise<string | undefined> {
+  try {
+    const folder = await getDialogFolder(key)
+    if (!folder || !isAbsolute(folder) || !(await stat(folder)).isDirectory()) return undefined
+    return folder
+  } catch {
+    return undefined
+  }
+}
+
+async function rememberDialogFolder(key: string, file: string): Promise<void> {
+  await setDialogFolder(key, dirname(resolve(file))).catch(() => undefined)
+}
+
+async function showOpenFileDialog(
+  window: BrowserWindow,
+  key: string,
+  options: OpenDialogOptions
+): Promise<OpenDialogReturnValue> {
+  const folder = await rememberedDialogFolder(key)
+  const result = await dialog.showOpenDialog(window, folder ? { ...options, defaultPath: folder } : options)
+  if (!result.canceled && result.filePaths[0]) await rememberDialogFolder(key, result.filePaths[0])
+  return result
+}
+
+async function showSaveFileDialog(
+  window: BrowserWindow,
+  key: string,
+  options: SaveDialogOptions
+): Promise<SaveDialogReturnValue> {
+  const folder = await rememberedDialogFolder(key)
+  const defaultPath = folder
+    ? resolve(folder, options.defaultPath ? basename(options.defaultPath) : '')
+    : options.defaultPath
+  const result = await dialog.showSaveDialog(window, { ...options, defaultPath })
+  if (!result.canceled && result.filePath) await rememberDialogFolder(key, result.filePath)
+  return result
+}
 
 function sendBuildState(state: BuildState): void {
   if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
@@ -640,7 +690,7 @@ ipcMain.handle('project:open', async (): Promise<Project | null> => {
   const window = BrowserWindow.getFocusedWindow() ?? mainWindow
   if (!window) return null
 
-  const result = await dialog.showOpenDialog(window, {
+  const result = await showOpenFileDialog(window, 'project', {
     title: 'Open Project',
     properties: ['openFile'],
     filters: [
@@ -684,7 +734,7 @@ ipcMain.handle('project:save-as', async (): Promise<Project | null> => {
   } else {
     defaultPath = resolve(dirname(projectFolder), `${currentName} Copy.project.gmx`)
   }
-  const result = await dialog.showSaveDialog(window, {
+  const result = await showSaveFileDialog(window, 'project', {
     title: 'Save Project As',
     defaultPath,
     properties: ['createDirectory', 'showOverwriteConfirmation'],
@@ -831,7 +881,7 @@ ipcMain.handle(
     const file = currentProjectPath()
     const window = BrowserWindow.getFocusedWindow() ?? mainWindow
     if (!window) return null
-    const result = await dialog.showOpenDialog(window, {
+    const result = await showOpenFileDialog(window, `resource-${type}`, {
       title: `Add Existing ${type[0].toUpperCase()}${type.slice(1)}`,
       properties: ['openFile'],
       filters: resourceFilter(type)
@@ -1185,7 +1235,7 @@ ipcMain.handle('sprite:frames-open', async (): Promise<StripImage[] | null> => {
   if (!projectFolder) throw new Error('No project is open')
   const window = BrowserWindow.getFocusedWindow() ?? mainWindow
   if (!window) return null
-  const result = await dialog.showOpenDialog(window, {
+  const result = await showOpenFileDialog(window, 'images', {
     title: 'Load Sprite Images',
     properties: ['openFile', 'multiSelections'],
     filters: [
@@ -1232,7 +1282,7 @@ ipcMain.handle('sprite:strip-open', async (): Promise<StripImage | null> => {
   if (!projectFolder) throw new Error('No project is open')
   const window = BrowserWindow.getFocusedWindow() ?? mainWindow
   if (!window) return null
-  const result = await dialog.showOpenDialog(window, {
+  const result = await showOpenFileDialog(window, 'images', {
     title: 'Load Sprite Strip',
     properties: ['openFile'],
     filters: [
@@ -1271,7 +1321,7 @@ ipcMain.handle(
     const window = BrowserWindow.getFocusedWindow() ?? mainWindow
     if (!window) return null
     const stem = basename(name).replace(/\.png$/i, '').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'sprite'
-    const result = await dialog.showSaveDialog(window, {
+    const result = await showSaveFileDialog(window, 'images', {
       title: 'Save Sprite Strip',
       defaultPath: `${stem}_strip.png`,
       filters: [{ name: 'PNG Image', extensions: ['png'] }]
@@ -1300,7 +1350,7 @@ ipcMain.handle('sound:replace', async (_event, file: unknown): Promise<SoundFile
 
   const window = BrowserWindow.getFocusedWindow() ?? mainWindow
   if (!window) return null
-  const result = await dialog.showOpenDialog(window, {
+  const result = await showOpenFileDialog(window, 'audio', {
     title: 'Load Sound',
     properties: ['openFile'],
     filters: [
@@ -1367,7 +1417,7 @@ ipcMain.handle(
 
     const window = BrowserWindow.getFocusedWindow() ?? mainWindow
     if (!window) return null
-    const result = await dialog.showOpenDialog(window, {
+    const result = await showOpenFileDialog(window, 'images', {
       title: 'Load Background',
       properties: ['openFile'],
       filters: [
@@ -1441,7 +1491,7 @@ ipcMain.handle(
     const window = BrowserWindow.getFocusedWindow() ?? mainWindow
     if (!window) return null
     const stem = basename(name).replace(/\.png$/i, '').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'background'
-    const result = await dialog.showSaveDialog(window, {
+    const result = await showSaveFileDialog(window, 'images', {
       title: 'Save Background Image',
       defaultPath: `${stem}.png`,
       filters: [{ name: 'PNG Image', extensions: ['png'] }]
@@ -1480,7 +1530,7 @@ ipcMain.handle('font:ranges-file', async (): Promise<FontRange[] | null> => {
   if (!projectFolder) throw new Error('No project is open')
   const window = BrowserWindow.getFocusedWindow() ?? mainWindow
   if (!window) return null
-  const result = await dialog.showOpenDialog(window, {
+  const result = await showOpenFileDialog(window, 'text', {
     title: 'Add Font Range from File',
     properties: ['openFile'],
     filters: [

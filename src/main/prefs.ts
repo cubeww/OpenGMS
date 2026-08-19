@@ -10,7 +10,7 @@ import { open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PrefKey, Prefs } from '../shared/types'
 
-const keys = new Set<PrefKey>(['editor', 'layout', 'recentProjects', 'recentColors'])
+const keys = new Set<PrefKey>(['editor', 'layout', 'recentProjects', 'recentColors', 'dialogFolders'])
 const folder = app.getPath('userData')
 const file = join(folder, 'preferences.json')
 const migrateLock = join(folder, 'preferences.migrate.lock')
@@ -78,6 +78,22 @@ function cleanPrefs(value: unknown): Prefs {
     if (!Object.prototype.hasOwnProperty.call(source, key)) continue
     const next = cleanValue(source[key])
     if (next !== undefined) result[key] = next
+  }
+  return result
+}
+
+function safeDialogKey(value: string): string {
+  if (!/^[a-z][a-z0-9-]{0,63}$/.test(value)) throw new Error('Invalid dialog folder key')
+  return value
+}
+
+function cleanDialogFolders(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const result: Record<string, string> = {}
+  for (const [key, folder] of Object.entries(value)) {
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(key)) continue
+    if (typeof folder !== 'string' || !folder || folder.length > 32767 || folder.includes('\0')) continue
+    result[key] = folder
   }
   return result
 }
@@ -190,4 +206,19 @@ export async function removePref(keyValue: unknown): Promise<void> {
     delete next[key]
     return next
   })
+}
+
+export async function getDialogFolder(keyValue: string): Promise<string | undefined> {
+  const key = safeDialogKey(keyValue)
+  await writes
+  return cleanDialogFolders((await readPrefs()).dialogFolders)[key]
+}
+
+export async function setDialogFolder(keyValue: string, folder: string): Promise<void> {
+  const key = safeDialogKey(keyValue)
+  if (!folder || folder.length > 32767 || folder.includes('\0')) throw new Error('Invalid dialog folder')
+  await updatePrefs((current) => ({
+    ...current,
+    dialogFolders: { ...cleanDialogFolders(current.dialogFolders), [key]: folder }
+  }))
 }

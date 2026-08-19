@@ -868,7 +868,7 @@ export async function createResource(projectFile: string, type: ResourceType, gr
   if (tree.spec.mode === 'extensions' && path.length > 0) throw new Error('Extensions do not support groups')
   const parent = groupAt(tree.items, path)
   const names = allNames(tree.items, tree.spec)
-  let name = uniqueName(tree.spec.base, names)
+  let name = uniqueName(tree.spec.base, names, resourceCount(tree.items) + 1)
   let node: ResourceNode
   let file: string
   if (tree.spec.mode === 'files') {
