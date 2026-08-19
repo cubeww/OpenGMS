@@ -22,6 +22,32 @@ export type ResourceChange = {
 
 export const resourceChangeEvent = 'opengms:resources-changed'
 
+const pendingRenames = new WeakMap<ResourceItem, Promise<ResourceItem>>()
+const renamedResources = new WeakMap<ResourceItem, ResourceItem>()
+
+function latestResource(item: ResourceItem): ResourceItem {
+  let current = item
+  const seen = new Set<ResourceItem>()
+  while (!seen.has(current)) {
+    seen.add(current)
+    const next = renamedResources.get(current)
+    if (!next) break
+    current = next
+  }
+  return current
+}
+
+export async function waitForResource(item: ResourceItem): Promise<ResourceItem> {
+  const current = latestResource(item)
+  const pending = pendingRenames.get(current) ?? pendingRenames.get(item)
+  if (!pending) return current
+  try {
+    return latestResource(await pending)
+  } catch {
+    return latestResource(item)
+  }
+}
+
 function walk(
   items: ProjectItem[],
   visit: (item: ResourceItem, groupPath: string[]) => boolean,
@@ -118,7 +144,7 @@ export function notifyResourceChange(change: ResourceChange): void {
   window.dispatchEvent(new CustomEvent<ResourceChange>(resourceChangeEvent, { detail: change }))
 }
 
-export async function renameResource(item: ResourceItem, name: string): Promise<ResourceItem> {
+async function renameNow(item: ResourceItem, name: string): Promise<ResourceItem> {
   const clean = name.trim()
   const previous = useApp.getState().project
   if (!previous) throw new Error('No project is open.')
@@ -135,4 +161,24 @@ export async function renameResource(item: ResourceItem, name: string): Promise<
   useApp.getState().setProject(project)
   notifyResourceChange({ previous, project, renamed: { oldId: item.id, item: renamed } })
   return renamed
+}
+
+export function renameResource(item: ResourceItem, name: string): Promise<ResourceItem> {
+  const current = latestResource(item)
+  const pending = pendingRenames.get(current)
+  if (pending) return pending.then((next) => renameResource(next, name))
+
+  const task = renameNow(current, name)
+  pendingRenames.set(current, task)
+  if (current !== item) pendingRenames.set(item, task)
+
+  void task.then((renamed) => {
+    renamedResources.set(current, renamed)
+    if (current !== item) renamedResources.set(item, renamed)
+  }).catch(() => undefined).finally(() => {
+    if (pendingRenames.get(current) === task) pendingRenames.delete(current)
+    if (pendingRenames.get(item) === task) pendingRenames.delete(item)
+  })
+
+  return task
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BoxSelect,
   ChevronLeft,
@@ -29,6 +29,7 @@ import { canUseFor3D } from '../../../shared/image'
 import { assetUrl } from '../assets'
 import { EditorOk } from '../EditorOk'
 import { ResourceName } from '../ResourceName'
+import { waitForResource } from '../resources'
 import { useSave } from '../save'
 import { useApp } from '../store'
 import { StripDialog } from '../StripDialog'
@@ -271,6 +272,7 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
   const [pasting, setPasting] = useState(false)
   const [stripLoading, setStripLoading] = useState(false)
   const [stripSaving, setStripSaving] = useState(false)
+  const resourceFile = useRef(params.item.file)
   const imageVersion = useApp((state) => state.imageVersion)
   const updateSprite = useApp((state) => state.updateSprite)
   const refreshImages = useApp((state) => state.refreshImages)
@@ -281,6 +283,17 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
   useEffect(() => {
     api.setTitle(`${params.item.name}${dirty ? ' •' : ''}`)
   }, [api, dirty, params.item.name])
+
+  useEffect(() => {
+    if (resourceFile.current === params.item.file) return
+    resourceFile.current = params.item.file
+    if (!params.item.sprite) return
+    const next = copySprite(params.item.sprite)
+    setSprite(next)
+    setSaved(JSON.stringify(next))
+    setFramePos(0)
+    setPlaying(false)
+  }, [params.item.file, params.item.sprite])
 
   useEffect(() => {
     if (!playing || !sprite || sprite.frames.length < 2) return
@@ -338,16 +351,20 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
     setFramePos((current) => (current + step + data.frames.length) % data.frames.length)
   }
 
-  function openImage(target = frame): void {
+  async function openImage(target = frame): Promise<void> {
     if (!target?.image || target.missing) return
+    const item = await waitForResource(params.item)
+    const current = item.sprite ?? data
+    const currentFrame = current.frames.find((candidate) => candidate.index === target.index) ?? target
+    if (!currentFrame.image || currentFrame.missing) return
     const detail: ImageParams = {
       resource: 'sprite',
-      itemId: params.item.id,
-      name: params.item.name,
+      itemId: item.id,
+      name: item.name,
       projectPath: params.projectPath,
-      width: data.width,
-      height: data.height,
-      frame: target
+      width: current.width,
+      height: current.height,
+      frame: currentFrame
     }
     window.dispatchEvent(new CustomEvent('opengms:open-image', { detail }))
   }
@@ -356,6 +373,7 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
     if (stripLoading) return
     setStripLoading(true)
     try {
+      await waitForResource(params.item)
       const image = await window.openGms.openSpriteStrip()
       if (image) setStrip(image)
     } catch (error) {
@@ -369,6 +387,7 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
     if (framesLoading) return
     setFramesLoading(true)
     try {
+      await waitForResource(params.item)
       const selected = await window.openGms.openSpriteImages()
       if (!selected?.length) return
       const width = Math.max(...selected.map((image) => image.width))
@@ -422,13 +441,14 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
     if (pasting) return
     setPasting(true)
     try {
-      const result = await window.openGms.pasteSpriteImage(params.item.file)
+      const item = await waitForResource(params.item)
+      const result = await window.openGms.pasteSpriteImage(item.file)
       if (!result) {
         addLog('Could not paste sprite image: the clipboard does not contain an image.')
         return
       }
       applyFrames(result)
-      addLog(`Pasted clipboard image into ${params.item.name}.`)
+      addLog(`Pasted clipboard image into ${item.name}.`)
     } catch (error) {
       addLog(`Failed to paste sprite image: ${errorText(error)}`)
     } finally {
@@ -437,9 +457,10 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
   }
 
   async function replaceFrames(images: string[], label: string): Promise<void> {
-    const result = await window.openGms.writeSpriteFrames(params.item.file, images)
+    const item = await waitForResource(params.item)
+    const result = await window.openGms.writeSpriteFrames(item.file, images)
     applyFrames(result)
-    addLog(`Loaded ${result.frames.length} frames from ${label} into ${params.item.name}.`)
+    addLog(`Loaded ${result.frames.length} frames from ${label} into ${item.name}.`)
   }
 
   async function importStrip(images: string[]): Promise<void> {
@@ -454,16 +475,21 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
 
   async function saveStrip(): Promise<void> {
     if (stripSaving || data.frames.length === 0) return
-
-    const width = data.width * data.frames.length
-    const height = data.height
-    if (data.width < 1 || height < 1 || width > 32767 || width * height > 64 * 1024 * 1024) {
-      addLog('Failed to save sprite strip: the combined image is too large.')
-      return
-    }
-
     setStripSaving(true)
     try {
+      const resource = await waitForResource(params.item)
+      const current = resource.sprite ?? data
+      const width = current.width * current.frames.length
+      const height = current.height
+      if (
+        current.width < 1 ||
+        height < 1 ||
+        width > 32767 ||
+        width * height > 64 * 1024 * 1024
+      ) {
+        throw new Error('The combined image is too large.')
+      }
+
       const canvas = document.createElement('canvas')
       canvas.width = width
       canvas.height = height
@@ -472,14 +498,24 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
       context.imageSmoothingEnabled = false
       context.clearRect(0, 0, width, height)
 
-      for (let index = 0; index < data.frames.length; index += 1) {
-        const item = data.frames[index]
-        if (!item.image || item.missing) throw new Error(`Frame ${item.index} is unavailable.`)
-        const image = await loadImage(assetUrl(item.image, params.projectPath, imageVersion))
-        context.drawImage(image, 0, 0, image.width, image.height, index * data.width, 0, data.width, data.height)
+      for (let index = 0; index < current.frames.length; index += 1) {
+        const frame = current.frames[index]
+        if (!frame.image || frame.missing) throw new Error(`Frame ${frame.index} is unavailable.`)
+        const image = await loadImage(assetUrl(frame.image, params.projectPath, imageVersion))
+        context.drawImage(
+          image,
+          0,
+          0,
+          image.width,
+          image.height,
+          index * current.width,
+          0,
+          current.width,
+          current.height
+        )
       }
 
-      const path = await window.openGms.saveSpriteStrip(params.item.name, canvas.toDataURL('image/png'))
+      const path = await window.openGms.saveSpriteStrip(resource.name, canvas.toDataURL('image/png'))
       if (path) addLog(`Saved sprite strip to ${path}.`)
     } catch (error) {
       addLog(`Failed to save sprite strip: ${errorText(error)}`)

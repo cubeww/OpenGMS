@@ -54,6 +54,14 @@ function EmptyTab(): null {
   return null
 }
 
+function blockTabDelete(event: KeyboardEvent): void {
+  if (event.key !== 'Backspace' && event.key !== 'Delete') return
+  const target = event.target
+  if (!(target instanceof HTMLElement) || !target.classList.contains('dv-tab')) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+}
+
 function EditorTab(props: IDockviewPanelHeaderProps): React.JSX.Element {
   const title = (props.api.title ?? 'Resource').replace(/\s+•$/, '')
   return (
@@ -64,12 +72,14 @@ function EditorTab(props: IDockviewPanelHeaderProps): React.JSX.Element {
   )
 }
 
-function keyedResource(
-  Component: React.FunctionComponent<IDockviewPanelProps>
+function resourceEditor(
+  Component: React.FunctionComponent<IDockviewPanelProps>,
+  preserveOnRename = false
 ): React.FunctionComponent<IDockviewPanelProps> {
-  return function KeyedResourcePanel(props): React.JSX.Element {
+  return function ResourceEditor(props): React.JSX.Element {
     const item = (props.params as { item?: ResourceItem }).item
-    return <Component key={item?.file ?? props.api.id} {...props} />
+    const key = preserveOnRename ? props.api.id : item?.file ?? props.api.id
+    return <Component key={key} {...props} />
   }
 }
 
@@ -161,24 +171,24 @@ const panels: Record<string, React.FunctionComponent<IDockviewPanelProps>> = {
   output: OutputPanel,
   code: CodePanel,
   configs: ConfigPanel,
-  script: keyedResource(ScriptPanel),
-  shader: keyedResource(ShaderPanel),
-  sprite: keyedResource(SpritePanel),
-  sound: keyedResource(SoundPanel),
-  background: keyedResource(BackgroundPanel),
-  path: keyedResource(PathPanel),
+  script: resourceEditor(ScriptPanel),
+  shader: resourceEditor(ShaderPanel),
+  sprite: resourceEditor(SpritePanel, true),
+  sound: resourceEditor(SoundPanel, true),
+  background: resourceEditor(BackgroundPanel, true),
+  path: resourceEditor(PathPanel),
   preferences: PreferencesPanel,
-  font: keyedResource(FontPanel),
+  font: resourceEditor(FontPanel),
   gameInfo: GameInfoPanel,
   globalSettings: GlobalSettingsPanel,
-  object: keyedResource(ObjectPanel),
-  timeline: keyedResource(TimelinePanel),
-  room: keyedResource(RoomPanel),
-  extension: keyedResource(ExtensionPanel),
-  extensionFile: keyedResource(ExtensionFilePanel),
-  extensionFunction: keyedResource(ExtensionFunctionPanel),
+  object: resourceEditor(ObjectPanel),
+  timeline: resourceEditor(TimelinePanel),
+  room: resourceEditor(RoomPanel),
+  extension: resourceEditor(ExtensionPanel),
+  extensionFile: resourceEditor(ExtensionFilePanel),
+  extensionFunction: resourceEditor(ExtensionFunctionPanel),
   image: ImagePanel,
-  macro: keyedResource(MacroPanel),
+  macro: resourceEditor(MacroPanel),
   empty: EmptyPanel
 }
 
@@ -307,6 +317,25 @@ export function Dock(): React.JSX.Element {
   }, [project])
 
   useEffect(() => {
+    function closeActivePanel(event: KeyboardEvent): void {
+      if (
+        !event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.shiftKey ||
+        event.key.toLowerCase() !== 'w'
+      ) return
+
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (event.repeat) return
+
+      const panel = apiRef.current?.activePanel
+      if (!panel || fixedPanels.has(panel.id)) return
+      const title = (panel.api.title ?? 'Resource').replace(/\s+•$/, '')
+      void closeEditor(panel.id, title, () => panel.api.close())
+    }
+
     function workspace(api: DockviewApi): string {
       const group =
         api.getGroup('workspace') ??
@@ -780,6 +809,8 @@ export function Dock(): React.JSX.Element {
       syncResourcePanels(api, change)
     }
 
+    window.addEventListener('keydown', blockTabDelete, true)
+    window.addEventListener('keydown', closeActivePanel, true)
     window.addEventListener('opengms:open-sprite', openSprite)
     window.addEventListener('opengms:open-image', openImage)
     window.addEventListener('opengms:open-sound', openSound)
@@ -808,6 +839,8 @@ export function Dock(): React.JSX.Element {
 
     return () => {
       saveRef.current?.dispose()
+      window.removeEventListener('keydown', blockTabDelete, true)
+      window.removeEventListener('keydown', closeActivePanel, true)
       window.removeEventListener('opengms:open-sprite', openSprite)
       window.removeEventListener('opengms:open-image', openImage)
       window.removeEventListener('opengms:open-sound', openSound)

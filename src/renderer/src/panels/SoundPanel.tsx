@@ -14,6 +14,7 @@ import type { ProjectItem, SoundData, SoundMode } from '../../../shared/types'
 import { assetUrl } from '../assets'
 import { EditorOk } from '../EditorOk'
 import { ResourceName } from '../ResourceName'
+import { waitForResource } from '../resources'
 import { useSave } from '../save'
 import { useApp } from '../store'
 
@@ -69,6 +70,7 @@ export function SoundPanel({ params, api }: IDockviewPanelProps<SoundParams>): R
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
   const audioRef = useRef<HTMLAudioElement>(null)
+  const resourceFile = useRef(params.item.file)
   const project = useApp((state) => state.project)
   const updateSound = useApp((state) => state.updateSound)
   const addLog = useApp((state) => state.addLog)
@@ -81,6 +83,19 @@ export function SoundPanel({ params, api }: IDockviewPanelProps<SoundParams>): R
   useEffect(() => {
     api.setTitle(`${params.item.name}${dirty ? ' •' : ''}`)
   }, [api, dirty, params.item.name])
+
+  useEffect(() => {
+    if (resourceFile.current === params.item.file) return
+    resourceFile.current = params.item.file
+    if (!params.item.sound) return
+    const next = copySound(params.item.sound)
+    setSound(next)
+    setSaved(JSON.stringify(next))
+    setAudioVersion(nextAudioRevision())
+    setPlaying(false)
+    setPosition(0)
+    setDuration(0)
+  }, [params.item.file, params.item.sound])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -142,11 +157,12 @@ export function SoundPanel({ params, api }: IDockviewPanelProps<SoundParams>): R
     if (loading) return
     setLoading(true)
     try {
-      const file = await window.openGms.replaceSound(params.item.file)
+      const item = await waitForResource(params.item)
+      const file = await window.openGms.replaceSound(item.file)
       if (!file) return
       setSound((current) => current ? { ...current, ...file, missing: false } : current)
       setAudioVersion(nextAudioRevision())
-      addLog(`Loaded new audio for ${params.item.name}.`)
+      addLog(`Loaded new audio for ${item.name}.`)
     } catch (error) {
       addLog(`Failed to load audio for ${params.item.name}: ${errorText(error)}`)
     } finally {
@@ -177,8 +193,11 @@ export function SoundPanel({ params, api }: IDockviewPanelProps<SoundParams>): R
   async function openExternal(): Promise<void> {
     if (!data.audio || data.missing) return
     try {
-      const error = await window.openGms.openSound(data.audio)
-      addLog(error || `Opened ${params.item.name} in the external audio editor.`)
+      const item = await waitForResource(params.item)
+      const current = item.sound ?? data
+      if (!current.audio || current.missing) return
+      const error = await window.openGms.openSound(current.audio)
+      addLog(error || `Opened ${item.name} in the external audio editor.`)
     } catch (error) {
       addLog(`Could not open ${params.item.name}: ${errorText(error)}`)
     }

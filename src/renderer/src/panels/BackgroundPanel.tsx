@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ClipboardPaste,
   Grid3X3,
@@ -15,6 +15,7 @@ import type { BackgroundData, ProjectItem } from '../../../shared/types'
 import { assetUrl } from '../assets'
 import { EditorOk } from '../EditorOk'
 import { ResourceName } from '../ResourceName'
+import { waitForResource } from '../resources'
 import { useSave } from '../save'
 import { useApp } from '../store'
 import type { ImageParams } from './ImagePanel'
@@ -182,6 +183,7 @@ export function BackgroundPanel({
   const [imageSaving, setImageSaving] = useState(false)
   const [loading, setLoading] = useState(false)
   const [pasting, setPasting] = useState(false)
+  const resourceFile = useRef(params.item.file)
   const imageVersion = useApp((state) => state.imageVersion)
   const updateBackground = useApp((state) => state.updateBackground)
   const refreshImages = useApp((state) => state.refreshImages)
@@ -196,6 +198,15 @@ export function BackgroundPanel({
   useEffect(() => {
     api.setTitle(`${params.item.name}${dirty ? ' •' : ''}`)
   }, [api, dirty, params.item.name])
+
+  useEffect(() => {
+    if (resourceFile.current === params.item.file) return
+    resourceFile.current = params.item.file
+    if (!params.item.background) return
+    const next = copyBackground(params.item.background)
+    setBackground(next)
+    setSaved(JSON.stringify(next))
+  }, [params.item.background, params.item.file])
 
   if (!background) {
     return (
@@ -221,16 +232,19 @@ export function BackgroundPanel({
     })
   }
 
-  function openImage(): void {
+  async function openImage(): Promise<void> {
     if (!data.image || data.missing) return
+    const item = await waitForResource(params.item)
+    const current = item.background ?? data
+    if (!current.image || current.missing) return
     const detail: ImageParams = {
       resource: 'background',
-      itemId: params.item.id,
-      name: params.item.name,
+      itemId: item.id,
+      name: item.name,
       projectPath: params.projectPath,
-      width: data.width,
-      height: data.height,
-      frame: { index: 0, image: data.image, missing: false }
+      width: current.width,
+      height: current.height,
+      frame: { index: 0, image: current.image, missing: false }
     }
     window.dispatchEvent(new CustomEvent('opengms:open-image', { detail }))
   }
@@ -239,11 +253,12 @@ export function BackgroundPanel({
     if (loading) return
     setLoading(true)
     try {
-      const file = await window.openGms.replaceBackground(params.item.file)
+      const item = await waitForResource(params.item)
+      const file = await window.openGms.replaceBackground(item.file)
       if (!file) return
       patch({ ...file, missing: false })
       refreshImages()
-      addLog(`Loaded image for background ${params.item.name}.`)
+      addLog(`Loaded image for background ${item.name}.`)
     } catch (error) {
       addLog(`Could not load image for background ${params.item.name}: ${error instanceof Error ? error.message : 'Operation failed'}`)
     } finally {
@@ -255,14 +270,15 @@ export function BackgroundPanel({
     if (pasting) return
     setPasting(true)
     try {
-      const file = await window.openGms.pasteBackgroundImage(params.item.file)
+      const item = await waitForResource(params.item)
+      const file = await window.openGms.pasteBackgroundImage(item.file)
       if (!file) {
         addLog('Could not paste background image: the clipboard does not contain an image.')
         return
       }
       patch({ ...file, missing: false })
       refreshImages()
-      addLog(`Pasted clipboard image into background ${params.item.name}.`)
+      addLog(`Pasted clipboard image into background ${item.name}.`)
     } catch (error) {
       addLog(`Could not paste image into background ${params.item.name}: ${error instanceof Error ? error.message : 'Operation failed'}`)
     } finally {
@@ -274,7 +290,10 @@ export function BackgroundPanel({
     if (imageSaving || !data.image || data.missing) return
     setImageSaving(true)
     try {
-      const path = await window.openGms.saveBackgroundImage(params.item.name, data.image)
+      const item = await waitForResource(params.item)
+      const current = item.background ?? data
+      if (!current.image || current.missing) throw new Error('The background image is unavailable.')
+      const path = await window.openGms.saveBackgroundImage(item.name, current.image)
       if (path) addLog(`Saved background image to ${path}.`)
     } catch (error) {
       addLog(`Could not save image for background ${params.item.name}: ${error instanceof Error ? error.message : 'Operation failed'}`)

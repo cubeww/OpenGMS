@@ -882,10 +882,6 @@ export function registerGml(api: MonacoApi): void {
         action: { indentAction: api.languages.IndentAction.IndentOutdent, appendText: ' * ' }
       },
       {
-        beforeText: /^\s*\*(?!\/).*$/,
-        action: { indentAction: api.languages.IndentAction.None, appendText: '* ' }
-      },
-      {
         beforeText: /^.*\{\s*$/,
         afterText: /^\s*\}/,
         action: { indentAction: api.languages.IndentAction.IndentOutdent }
