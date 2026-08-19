@@ -723,17 +723,38 @@ export function gmlResourceDecorations(
 }
 
 function localNames(model: Monaco.editor.ITextModel): Array<{ name: string; detail: string }> {
-  const source = model.getValue()
+  const source = codeMask(model.getValue())
   const names = new Map<string, string>()
   const declaration = /\b(var|globalvar)\s+([^;\r\n]+)/g
   let match: RegExpExecArray | null
 
   while ((match = declaration.exec(source))) {
     const detail = match[1] === 'globalvar' ? 'Global variable' : 'Local variable'
-    for (const part of match[2].split(',')) {
-      const name = part.match(/^\s*([a-zA-Z_]\w*)/)?.[1]
+    const body = match[2]
+    let start = 0
+    let round = 0
+    let square = 0
+    let curly = 0
+
+    const add = (end: number): void => {
+      const name = body.slice(start, end).match(/^\s*([a-zA-Z_]\w*)/)?.[1]
       if (name) names.set(name, detail)
     }
+
+    for (let index = 0; index < body.length; index += 1) {
+      const char = body[index]
+      if (char === '(') round += 1
+      else if (char === ')') round = Math.max(0, round - 1)
+      else if (char === '[') square += 1
+      else if (char === ']') square = Math.max(0, square - 1)
+      else if (char === '{') curly += 1
+      else if (char === '}') curly = Math.max(0, curly - 1)
+      else if (char === ',' && round === 0 && square === 0 && curly === 0) {
+        add(index)
+        start = index + 1
+      }
+    }
+    add(body.length)
   }
 
   const globalVariable = /\bglobal\.([a-zA-Z_]\w*)/g

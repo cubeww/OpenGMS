@@ -332,7 +332,10 @@ function standardLines(items: TreeNode[], tree: ProjectTree, depth: number): str
       lines.push(`${indent}</${tree.spec.section}>`)
     } else {
       const attrs = item.attrs
-      lines.push(`${indent}<${tree.spec.item}${attrSource(attrs)}>${xml(item.value.replace(/\//g, '\\'))}</${tree.spec.item}>`)
+      const value = tree.spec.type === 'script'
+        ? addExtension(item.value, tree.spec.extension)
+        : item.value
+      lines.push(`${indent}<${tree.spec.item}${attrSource(attrs)}>${xml(value.replace(/\//g, '\\'))}</${tree.spec.item}>`)
     }
   }
   return lines
@@ -511,7 +514,8 @@ function copyName(base: string, names: Set<string>): string {
 }
 
 function resourceValue(spec: Spec, name: string): string {
-  return `${spec.folder}/${name}`
+  const value = `${spec.folder}/${name}`
+  return spec.type === 'script' ? addExtension(value, spec.extension) : value
 }
 
 function diskFile(tree: ProjectTree, node: ResourceNode, groupPath: string[] = []): string {

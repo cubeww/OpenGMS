@@ -31,6 +31,13 @@ const modes: Array<{ value: SoundMode; title: string; note: string }> = [
   { value: 'streamed', title: 'Streamed', note: 'On disk · Higher CPU' }
 ]
 
+let audioRevision = 0
+
+function nextAudioRevision(): number {
+  audioRevision += 1
+  return audioRevision
+}
+
 function copySound(sound: SoundData): SoundData {
   return { ...sound }
 }
@@ -57,7 +64,7 @@ export function SoundPanel({ params, api }: IDockviewPanelProps<SoundParams>): R
   const [saved, setSaved] = useState(() => (source ? JSON.stringify(source) : ''))
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [audioVersion, setAudioVersion] = useState(0)
+  const [audioVersion, setAudioVersion] = useState(nextAudioRevision)
   const [playing, setPlaying] = useState(false)
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -138,7 +145,7 @@ export function SoundPanel({ params, api }: IDockviewPanelProps<SoundParams>): R
       const file = await window.openGms.replaceSound(params.item.file)
       if (!file) return
       setSound((current) => current ? { ...current, ...file, missing: false } : current)
-      setAudioVersion((version) => version + 1)
+      setAudioVersion(nextAudioRevision())
       addLog(`Loaded new audio for ${params.item.name}.`)
     } catch (error) {
       addLog(`Failed to load audio for ${params.item.name}: ${errorText(error)}`)

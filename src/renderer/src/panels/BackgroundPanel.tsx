@@ -200,7 +200,7 @@ export function BackgroundPanel({
   if (!background) {
     return (
       <div className="background-empty">
-        <Layers3 size={34} />
+        <ImageIcon size={34} />
         <strong>Background data is unavailable</strong>
         <span>The background descriptor is missing or could not be parsed.</span>
       </div>
@@ -306,7 +306,7 @@ export function BackgroundPanel({
     <section className="background-editor">
       <header className="background-editor-head">
         <div className="sprite-title background-title">
-          <span className="sprite-title-icon"><Layers3 size={18} /></span>
+          <span className="sprite-title-icon"><ImageIcon size={18} /></span>
           <div><strong>{params.item.name}</strong><small>Background resource</small></div>
         </div>
         <EditorOk api={api} />

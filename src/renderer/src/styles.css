@@ -19,6 +19,16 @@
   --green-bright: #a1e15e;
   --blue: #74a8ff;
   --orange: #f1a85b;
+  --resource-sprite: #bb87dd;
+  --resource-sound: #dd9670;
+  --resource-background: #65af9c;
+  --resource-path: #d6b45c;
+  --resource-script: #74a8ff;
+  --resource-shader: #d17ac2;
+  --resource-font: #9ca8b8;
+  --resource-timeline: #ce8b69;
+  --resource-object: #7fc366;
+  --resource-room: #e3a958;
 }
 
 * {
@@ -533,43 +543,43 @@ select:focus-visible {
 }
 
 .tool-resource.sprite:not(:disabled) {
-  color: #65b7f0;
+  color: var(--resource-sprite);
 }
 
 .tool-resource.sound:not(:disabled) {
-  color: #b594e8;
+  color: var(--resource-sound);
 }
 
 .tool-resource.background:not(:disabled) {
-  color: #75c998;
+  color: var(--resource-background);
 }
 
 .tool-resource.path:not(:disabled) {
-  color: #ef9a68;
+  color: var(--resource-path);
 }
 
 .tool-resource.script:not(:disabled) {
-  color: #75b8ec;
+  color: var(--resource-script);
 }
 
 .tool-resource.shader:not(:disabled) {
-  color: #db8dd9;
+  color: var(--resource-shader);
 }
 
 .tool-resource.font:not(:disabled) {
-  color: #df7e8f;
+  color: var(--resource-font);
 }
 
 .tool-resource.timeline:not(:disabled) {
-  color: #73c6d3;
+  color: var(--resource-timeline);
 }
 
 .tool-resource.object:not(:disabled) {
-  color: #808ee8;
+  color: var(--resource-object);
 }
 
 .tool-resource.room:not(:disabled) {
-  color: #e6bb63;
+  color: var(--resource-room);
 }
 
 .tool-separator {
@@ -740,11 +750,15 @@ select:focus-visible {
 }
 
 .thumb-fallback.sprite {
-  color: #bb87dd;
+  color: var(--resource-sprite);
+}
+
+.thumb-fallback.background {
+  color: var(--resource-background);
 }
 
 .thumb-fallback.object {
-  color: #7fc366;
+  color: var(--resource-object);
 }
 
 .tree-row:hover:not(:disabled) {
@@ -830,52 +844,52 @@ select:focus-visible {
 
 .root-icon.sprite,
 .resource-icon.sprite {
-  color: #bb87dd;
+  color: var(--resource-sprite);
 }
 
 .root-icon.sound,
 .resource-icon.sound {
-  color: #dd9670;
+  color: var(--resource-sound);
 }
 
 .root-icon.background,
 .resource-icon.background {
-  color: #65af9c;
+  color: var(--resource-background);
 }
 
 .root-icon.path,
 .resource-icon.path {
-  color: #d6b45c;
+  color: var(--resource-path);
 }
 
 .root-icon.script,
 .resource-icon.script {
-  color: #74a8ff;
+  color: var(--resource-script);
 }
 
 .root-icon.shader,
 .resource-icon.shader {
-  color: #d17ac2;
+  color: var(--resource-shader);
 }
 
 .root-icon.font,
 .resource-icon.font {
-  color: #9ca8b8;
+  color: var(--resource-font);
 }
 
 .root-icon.timeline,
 .resource-icon.timeline {
-  color: #ce8b69;
+  color: var(--resource-timeline);
 }
 
 .root-icon.object,
 .resource-icon.object {
-  color: #7fc366;
+  color: var(--resource-object);
 }
 
 .root-icon.room,
 .resource-icon.room {
-  color: #e3a958;
+  color: var(--resource-room);
 }
 
 .root-icon.file,

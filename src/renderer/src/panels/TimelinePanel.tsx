@@ -8,6 +8,7 @@ import {
   Clock3,
   Copy,
   GitMerge,
+  Hourglass,
   Pencil,
   Plus,
   RefreshCw,
@@ -283,7 +284,7 @@ export function TimelinePanel({ params, api }: IDockviewPanelProps<TimelineParam
   if (!timeline) {
     return (
       <div className="object-empty">
-        <Clock3 size={34} />
+        <Hourglass size={34} />
         <strong>Timeline data is unavailable</strong>
         <span>The timeline descriptor is missing or could not be parsed.</span>
       </div>
@@ -475,7 +476,7 @@ export function TimelinePanel({ params, api }: IDockviewPanelProps<TimelineParam
     <section className="object-editor timeline-editor">
       <header className="object-editor-head">
         <div className="sprite-title object-title timeline-title">
-          <span className="sprite-title-icon"><Clock3 size={18} /></span>
+          <span className="sprite-title-icon"><Hourglass size={18} /></span>
           <div><strong>{params.item.name}</strong><small>Timeline resource</small></div>
         </div>
         <EditorOk api={api} />

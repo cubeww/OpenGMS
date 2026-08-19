@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  AppWindow,
   Box,
   Boxes,
-  Braces,
   ChevronRight,
-  Clock3,
   Copy,
   ExternalLink,
   FileArchive,
@@ -14,16 +13,17 @@ import {
   FolderClosed,
   FolderOpen,
   FolderPlus,
+  Ghost,
+  Hourglass,
   Image as ImageIcon,
   Info,
-  Layers3,
   ListChecks,
-  Map,
   Pencil,
   Plus,
   Puzzle,
   Route,
   Search,
+  ScrollText,
   Sparkles,
   Trash2,
   Type,
@@ -106,16 +106,16 @@ const groupInfo: Array<{ type: ResourceType; name: string; one: string }> = [
 ]
 
 const icons: Record<ResourceType, LucideIcon> = {
-  sprite: ImageIcon,
+  sprite: Ghost,
   sound: Volume2,
-  background: Layers3,
+  background: ImageIcon,
   path: Route,
-  script: Braces,
+  script: ScrollText,
   shader: Sparkles,
   font: Type,
-  timeline: Clock3,
+  timeline: Hourglass,
   object: Box,
-  room: Map,
+  room: AppWindow,
   file: FileArchive,
   extension: Puzzle,
   macro: Variable
@@ -249,7 +249,7 @@ function Thumbnail({
   version: number
 }): React.JSX.Element {
   const [failed, setFailed] = useState(false)
-  const Icon = item.type === 'object' ? Box : item.type === 'background' ? Layers3 : ImageIcon
+  const Icon = item.type === 'object' ? Box : item.type === 'background' ? ImageIcon : Ghost
 
   useEffect(() => setFailed(false), [item.image, projectPath, version])
 

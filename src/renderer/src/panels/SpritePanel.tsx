@@ -6,6 +6,7 @@ import {
   CircleDot,
   ClipboardPaste,
   FileInput,
+  Ghost,
   Image as ImageIcon,
   Images,
   Pencil,
@@ -303,7 +304,7 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
   if (!sprite) {
     return (
       <div className="sprite-empty">
-        <ImageIcon size={34} />
+        <Ghost size={34} />
         <strong>Sprite data is unavailable</strong>
         <span>The sprite descriptor is missing or could not be parsed.</span>
       </div>
@@ -512,7 +513,7 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
     <section className="sprite-editor">
       <header className="sprite-editor-head">
         <div className="sprite-title">
-          <span className="sprite-title-icon"><ImageIcon size={18} /></span>
+          <span className="sprite-title-icon"><Ghost size={18} /></span>
           <div><strong>{params.item.name}</strong><small>Sprite resource</small></div>
         </div>
         <nav className="sprite-pages" aria-label="Sprite editor pages">
@@ -532,7 +533,7 @@ export function SpritePanel({ params, api }: IDockviewPanelProps<SpriteParams>):
       {page === 'properties' && (
         <div className="sprite-properties">
           <div className="sprite-settings">
-            <FieldGroup title="Sprite" icon={ImageIcon}>
+            <FieldGroup title="Sprite" icon={Ghost}>
               <label className="sprite-text-field">
                 <span>Name</span>
                 <ResourceName item={params.item} />

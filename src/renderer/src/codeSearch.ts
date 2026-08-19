@@ -92,9 +92,11 @@ function eventName(event: ObjectEvent): string {
     case 4: return `Collision with ${event.target || '<undefined>'}`
     case 5: return `Keyboard ${keyName(event.number)}`
     case 6: return `Mouse ${event.number}`
-    case 7: return event.number >= 10 && event.number <= 25
-      ? `User Event ${event.number - 10}`
-      : `Other ${event.number}`
+    case 7:
+      if (event.number >= 10 && event.number <= 25) return `User Event ${event.number - 10}`
+      if (event.number >= 40 && event.number <= 47) return `Outside View ${event.number - 40}`
+      if (event.number >= 50 && event.number <= 57) return `Boundary View ${event.number - 50}`
+      return `Other ${event.number}`
     case 8: return `Draw ${event.number}`
     case 9: return `Key Press ${keyName(event.number)}`
     case 10: return `Key Release ${keyName(event.number)}`

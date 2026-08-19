@@ -1,4 +1,4 @@
-import { FilePlus2, Image, Images, Volume2, X, type LucideIcon } from 'lucide-react'
+import { FilePlus2, Ghost, Image, Volume2, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { MediaImportType, Project, ProjectItem, ResourceType } from '../../shared/types'
 import { openProjectWithSave } from './close'
@@ -69,7 +69,7 @@ const included: ImportChoice = {
 }
 
 const imageTypes: ImportChoice[] = [
-  { type: 'sprite', label: 'Sprite', detail: 'Create one sprite frame', icon: Images },
+  { type: 'sprite', label: 'Sprite', detail: 'Create one sprite frame', icon: Ghost },
   { type: 'background', label: 'Background', detail: 'Create a background image', icon: Image },
   included
 ]

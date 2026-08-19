@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AppWindow,
   ArrowDown,
   ArrowUp,
   Atom,
@@ -11,7 +12,6 @@ import {
   Image as ImageIcon,
   Info,
   Layers3,
-  Map,
   Plus,
   RefreshCw,
   Settings2,
@@ -440,10 +440,10 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
   }, [params.item.id, room])
 
   if (loading) {
-    return <div className="room-empty"><Map size={34} /><strong>Opening room</strong><span>Reading room contents…</span></div>
+    return <div className="room-empty"><AppWindow size={34} /><strong>Opening room</strong><span>Reading room contents…</span></div>
   }
   if (!room || !project) {
-    return <div className="room-empty"><Map size={34} /><strong>Room is unavailable</strong><span>{loadError || 'The room file could not be parsed.'}</span></div>
+    return <div className="room-empty"><AppWindow size={34} /><strong>Room is unavailable</strong><span>{loadError || 'The room file could not be parsed.'}</span></div>
   }
 
   const data = room
@@ -864,7 +864,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
   return (
     <section className="room-editor">
       <header className="room-editor-head">
-        <div className="sprite-title room-title"><span className="sprite-title-icon"><Map size={18} /></span><div><strong>{params.item.name}</strong><small>{data.width} × {data.height} · {data.instances.length} instances</small></div></div>
+        <div className="sprite-title room-title"><span className="sprite-title-icon"><AppWindow size={18} /></span><div><strong>{params.item.name}</strong><small>{data.width} × {data.height} · {data.instances.length} instances</small></div></div>
         <div className="room-toolbar">
           <label>Snap X<input type="number" min={1} value={data.snapX} onChange={(event) => patch({ snapX: Math.max(1, Number(event.target.value) || 1) })} /></label>
           <label>Y<input type="number" min={1} value={data.snapY} onChange={(event) => patch({ snapY: Math.max(1, Number(event.target.value) || 1) })} /></label>

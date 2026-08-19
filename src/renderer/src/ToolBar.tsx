@@ -1,18 +1,18 @@
 import { useState } from 'react'
 import {
+  AppWindow,
   Box,
-  Braces,
-  Clock3,
-  Eraser,
+  Broom,
   FilePlus2,
   FolderOpen,
+  Ghost,
   Hammer,
+  Hourglass,
   Image as ImageIcon,
-  Layers3,
-  Map,
   Play,
   Route,
   Save,
+  ScrollText,
   Settings2,
   Sparkles,
   Square,
@@ -48,16 +48,16 @@ function ToolButton({ label, className, disabled, onClick, children }: ToolButto
 }
 
 const quickResources: Array<{ type: QuickResourceType; name: string; icon: LucideIcon }> = [
-  { type: 'sprite', name: 'Sprite', icon: ImageIcon },
+  { type: 'sprite', name: 'Sprite', icon: Ghost },
   { type: 'sound', name: 'Sound', icon: Volume2 },
-  { type: 'background', name: 'Background', icon: Layers3 },
+  { type: 'background', name: 'Background', icon: ImageIcon },
   { type: 'path', name: 'Path', icon: Route },
-  { type: 'script', name: 'Script', icon: Braces },
+  { type: 'script', name: 'Script', icon: ScrollText },
   { type: 'shader', name: 'Shader', icon: Sparkles },
   { type: 'font', name: 'Font', icon: Type },
-  { type: 'timeline', name: 'Timeline', icon: Clock3 },
+  { type: 'timeline', name: 'Timeline', icon: Hourglass },
   { type: 'object', name: 'Object', icon: Box },
-  { type: 'room', name: 'Room', icon: Map }
+  { type: 'room', name: 'Room', icon: AppWindow }
 ]
 
 export function ToolBar(): React.JSX.Element {
@@ -136,7 +136,7 @@ export function ToolBar(): React.JSX.Element {
           disabled={!project || loading || busy || saveState.saving}
           onClick={() => void cleanProject()}
         >
-          <Eraser size={18} />
+          <Broom size={18} />
         </ToolButton>
       </div>
       <span className="tool-separator" />

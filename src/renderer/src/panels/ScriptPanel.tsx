@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Braces } from 'lucide-react'
+import { ScrollText } from 'lucide-react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { CodeFile, ProjectItem } from '../../../shared/types'
 import { parseScriptInfo } from '../../../shared/script'
@@ -92,7 +92,7 @@ export function ScriptPanel({ params, api }: IDockviewPanelProps<ScriptParams>):
   if (loading) {
     return (
       <div className="script-empty">
-        <Braces size={34} />
+        <ScrollText size={34} />
         <strong>Opening script…</strong>
       </div>
     )
@@ -101,7 +101,7 @@ export function ScriptPanel({ params, api }: IDockviewPanelProps<ScriptParams>):
   if (!code || error) {
     return (
       <div className="script-empty">
-        <Braces size={34} />
+        <ScrollText size={34} />
         <strong>Script is unavailable</strong>
         <span>{error || 'The script file could not be read.'}</span>
       </div>
@@ -112,7 +112,7 @@ export function ScriptPanel({ params, api }: IDockviewPanelProps<ScriptParams>):
     <section className="script-editor">
       <header className="script-editor-head">
         <div className="sprite-title script-title">
-          <span className="sprite-title-icon"><Braces size={18} /></span>
+          <span className="sprite-title-icon"><ScrollText size={18} /></span>
           <div><ResourceName className="resource-title-name" item={params.item} /><small>{params.item.path}</small></div>
         </div>
         <EditorOk api={api} />
