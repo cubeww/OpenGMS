@@ -1691,14 +1691,12 @@ select:focus-visible {
 }
 
 .font-picker-popup {
-  position: absolute;
-  z-index: 5000;
-  top: calc(100% + 4px);
-  left: 0;
+  z-index: 12000;
   display: grid;
   grid-template-rows: 37px minmax(50px, 280px) 25px;
-  width: max(100%, 310px);
-  max-width: min(520px, 80vw);
+  width: max(var(--radix-popover-trigger-width), 310px);
+  max-width: min(520px, calc(100vw - 16px));
+  max-height: var(--radix-popover-content-available-height);
   overflow: hidden;
   border: 1px solid #3a4858;
   border-radius: 7px;

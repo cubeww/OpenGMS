@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, Search } from 'lucide-react'
+import { Popover } from 'radix-ui'
 
 type FontPickerProps = {
   value: string
@@ -18,7 +19,6 @@ export function FontPicker({
   loading = false,
   onChange
 }: FontPickerProps): React.JSX.Element {
-  const rootRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -32,46 +32,40 @@ export function FontPicker({
     ? all.filter((font) => font.toLocaleLowerCase().includes(text))
     : all
 
-  useEffect(() => {
-    if (!open) return
-    function outside(event: PointerEvent): void {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    function key(event: KeyboardEvent): void {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    window.addEventListener('pointerdown', outside, true)
-    window.addEventListener('keydown', key)
-    window.requestAnimationFrame(() => searchRef.current?.focus())
-    return () => {
-      window.removeEventListener('pointerdown', outside, true)
-      window.removeEventListener('keydown', key)
-    }
-  }, [open])
-
-  function toggle(): void {
-    setOpen((current) => {
-      if (!current) setQuery('')
-      return !current
-    })
+  function changeOpen(next: boolean): void {
+    if (next) setQuery('')
+    setOpen(next)
   }
 
   return (
-    <div ref={rootRef} className={`font-picker ${open ? 'open' : ''}`}>
-      <button
-        type="button"
-        className="font-picker-trigger"
-        onClick={toggle}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        title={loading ? 'Loading installed fonts…' : `${all.length} installed font families`}
-      >
-        <span style={{ fontFamily: fontStyle(value) }}>{value || 'Select a font'}</span>
-        <ChevronDown size={14} />
-      </button>
+    <Popover.Root open={open} onOpenChange={changeOpen}>
+      <div className={`font-picker ${open ? 'open' : ''}`}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className="font-picker-trigger"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            title={loading ? 'Loading installed fonts…' : `${all.length} installed font families`}
+          >
+            <span style={{ fontFamily: fontStyle(value) }}>{value || 'Select a font'}</span>
+            <ChevronDown size={14} />
+          </button>
+        </Popover.Trigger>
+      </div>
 
-      {open && (
-        <div className="font-picker-popup">
+      <Popover.Portal>
+        <Popover.Content
+          className="font-picker-popup"
+          side="bottom"
+          align="start"
+          sideOffset={4}
+          collisionPadding={8}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            window.requestAnimationFrame(() => searchRef.current?.focus())
+          }}
+        >
           <label className="font-picker-search">
             <Search size={14} />
             <input
@@ -109,8 +103,8 @@ export function FontPicker({
             {loading && all.length === 0 && <div className="font-picker-empty">Loading installed fonts…</div>}
           </div>
           <footer>{shown.length} of {all.length} installed font families</footer>
-        </div>
-      )}
-    </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   )
 }
