@@ -9,6 +9,9 @@ import type {
 } from '../shared/types'
 
 const api: OpenGmsApi = {
+  initPrefs: (legacy) => ipcRenderer.invoke('prefs:init', legacy),
+  setPref: (key, value) => ipcRenderer.invoke('prefs:set', key, value) as Promise<void>,
+  removePref: (key) => ipcRenderer.invoke('prefs:remove', key) as Promise<void>,
   startProject: () => ipcRenderer.invoke('project:start') as Promise<Project | null>,
   newProject: () => ipcRenderer.invoke('project:new') as Promise<Project | null>,
   openProject: () => ipcRenderer.invoke('project:open') as Promise<Project | null>,

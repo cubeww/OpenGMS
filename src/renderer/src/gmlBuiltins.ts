@@ -25,6 +25,42 @@ export const gmlFunctions: GmlFunction[] = [
     "category": "Maths"
   },
   {
+    "name": "array_copy",
+    "signature": "array_copy(dest, dest_index, src, src_index, length)",
+    "description": "Copies all or part of one array into another array.",
+    "category": "Arrays"
+  },
+  {
+    "name": "array_create",
+    "signature": "array_create(size [, value])",
+    "description": "Creates an array of the given size and optionally fills it with a value.",
+    "category": "Arrays"
+  },
+  {
+    "name": "array_equals",
+    "signature": "array_equals(var1, var2)",
+    "description": "Returns whether two arrays contain equivalent values.",
+    "category": "Arrays"
+  },
+  {
+    "name": "array_height_2d",
+    "signature": "array_height_2d(array)",
+    "description": "Returns the number of entries in the first dimension of a 2D array.",
+    "category": "Arrays"
+  },
+  {
+    "name": "array_length_1d",
+    "signature": "array_length_1d(array)",
+    "description": "Returns the number of entries in a one-dimensional array.",
+    "category": "Arrays"
+  },
+  {
+    "name": "array_length_2d",
+    "signature": "array_length_2d(array, n)",
+    "description": "Returns the number of entries in one row of a two-dimensional array.",
+    "category": "Arrays"
+  },
+  {
     "name": "ansi_char",
     "signature": "ansi_char(val)",
     "description": "Returns a string containing the character with raw BYTE value set.",

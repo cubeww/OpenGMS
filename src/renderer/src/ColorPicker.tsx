@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ClipboardPaste, Copy, Pipette, RotateCcw } from 'lucide-react'
 import { Popover } from 'radix-ui'
+import { getPref, setPref } from './prefs'
 
 type Rgb = { r: number; g: number; b: number }
 type Hsv = { h: number; s: number; v: number }
@@ -19,8 +20,6 @@ const presets = [
   '#16A085', '#00A8C6', '#2878C7', '#4D55CC', '#8E44AD', '#D252B2',
   '#795548', '#F3A6A6', '#6EA8FE', '#80CBC4', '#FFCB6B', '#E6A96B'
 ]
-
-const recentKey = 'opengms.recent-colors.v1'
 
 function clamp(value: number, min = 0, max = 255): number {
   return Math.max(min, Math.min(max, value))
@@ -95,22 +94,14 @@ function hsvToRgb({ h, s, v }: Hsv): Rgb {
 }
 
 function readRecent(): string[] {
-  try {
-    const value = JSON.parse(localStorage.getItem(recentKey) ?? '[]')
-    return Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === 'string' && parseColor(item) !== null).map(normalize).slice(0, 8)
-      : []
-  } catch {
-    return []
-  }
+  const value = getPref<unknown>('recentColors', [])
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && parseColor(item) !== null).map(normalize).slice(0, 8)
+    : []
 }
 
 function saveRecent(colors: string[]): void {
-  try {
-    localStorage.setItem(recentKey, JSON.stringify(colors))
-  } catch {
-    // Recent colors are optional.
-  }
+  setPref('recentColors', colors)
 }
 
 export function ColorPicker({

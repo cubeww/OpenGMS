@@ -1,4 +1,16 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeImage,
+  protocol,
+  session,
+  shell,
+  type Session
+} from 'electron'
 import {
   copyFile,
   cp,
@@ -43,6 +55,7 @@ import { loadObject, saveObject } from './object'
 import { saveMacros } from './macro'
 import { createProject } from './newProject'
 import { savePath } from './path'
+import { initPrefs, preparePrefs, removePref, setPref } from './prefs'
 import { loadProject } from './project'
 import {
   addExistingResource as addExistingProjectResource,
@@ -100,6 +113,7 @@ function projectArg(args: string[]): string | null {
 }
 
 const startFile = projectArg(process.argv)
+const legacyPrefs = preparePrefs()
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -499,7 +513,7 @@ async function openAsset(request: Request): Promise<Response> {
   }
 }
 
-function createWindow(): void {
+function createWindow(webSession: Session): void {
   dirtyCount = 0
   allowWindowClose = false
   closePromptOpen = false
@@ -515,7 +529,8 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      session: webSession
     }
   })
 
@@ -586,6 +601,10 @@ async function createUntitledProject(): Promise<Project> {
     throw error
   }
 }
+
+ipcMain.handle('prefs:init', (_event, legacy: unknown) => initPrefs(legacy))
+ipcMain.handle('prefs:set', (_event, key: unknown, value: unknown) => setPref(key, value))
+ipcMain.handle('prefs:remove', (_event, key: unknown) => removePref(key))
 
 ipcMain.handle('project:start', async (): Promise<Project | null> => {
   if (projectPath) return openProjectFile(projectPath, projectTempRoot)
@@ -1527,11 +1546,14 @@ ipcMain.on('window:finish-close', (event, result: unknown) => {
 app.whenReady().then(() => {
   app.setAppUserModelId('dev.opengms.editor')
   Menu.setApplicationMenu(null)
-  void protocol.handle('opengms', openAsset)
-  createWindow()
+  const webSession = legacyPrefs
+    ? session.defaultSession
+    : session.fromPartition(`opengms-${process.pid}`, { cache: false })
+  void webSession.protocol.handle('opengms', openAsset)
+  createWindow(webSession)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(webSession)
   })
 })
 

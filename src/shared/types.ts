@@ -632,7 +632,14 @@ export type BuildOutput = {
   text: string
 }
 
+export type PrefKey = 'editor' | 'layout' | 'recentProjects' | 'recentColors'
+
+export type Prefs = Partial<Record<PrefKey, unknown>>
+
 export type OpenGmsApi = {
+  initPrefs: (legacy: Prefs) => Promise<Prefs>
+  setPref: (key: PrefKey, value: unknown) => Promise<void>
+  removePref: (key: PrefKey) => Promise<void>
   startProject: () => Promise<Project | null>
   newProject: () => Promise<Project | null>
   openProject: () => Promise<Project | null>

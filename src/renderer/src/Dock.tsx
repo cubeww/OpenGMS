@@ -43,9 +43,8 @@ import {
   type ResourceChange,
   type ResourceItem
 } from './resources'
+import { getPref, removePref, setPref } from './prefs'
 import { useApp } from './store'
-
-const layoutKey = 'opengms.layout.v3'
 
 function EmptyPanel(): React.JSX.Element {
   return <div className="workspace-empty" />
@@ -256,12 +255,12 @@ export function Dock(): React.JSX.Element {
     const api = event.api
     apiRef.current = api
 
-    const saved = localStorage.getItem(layoutKey)
+    const saved = getPref<ReturnType<DockviewApi['toJSON']> | null>('layout', null)
     if (saved) {
       try {
-        api.fromJSON(JSON.parse(saved))
+        api.fromJSON(saved)
       } catch {
-        localStorage.removeItem(layoutKey)
+        removePref('layout')
         addDefaultLayout(api)
       }
     } else {
@@ -279,7 +278,7 @@ export function Dock(): React.JSX.Element {
       }
 
       if (api.panels.every((panel) => fixedPanels.has(panel.id))) {
-        localStorage.setItem(layoutKey, JSON.stringify(api.toJSON()))
+        setPref('layout', api.toJSON())
       }
       notifyWindowPanels(api)
     })
@@ -767,7 +766,7 @@ export function Dock(): React.JSX.Element {
       if (!api) return
       void confirmAll().then((confirmed) => {
         if (!confirmed) return
-        localStorage.removeItem(layoutKey)
+        removePref('layout')
         api.clear()
         addDefaultLayout(api)
         notifyWindowPanels(api)

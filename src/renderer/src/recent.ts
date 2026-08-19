@@ -1,11 +1,11 @@
 import type { Project } from '../../shared/types'
+import { getPref, setPref } from './prefs'
 
 export type RecentProject = {
   name: string
   path: string
 }
 
-const storageKey = 'opengms.recent-projects'
 const limit = 10
 
 function pathKey(path: string): string {
@@ -34,20 +34,12 @@ function clean(value: unknown): RecentProject[] {
 }
 
 function write(items: RecentProject[]): RecentProject[] {
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(items))
-  } catch {
-    // Recent projects are optional when storage is unavailable.
-  }
+  setPref('recentProjects', items)
   return items
 }
 
 export function loadRecentProjects(): RecentProject[] {
-  try {
-    return clean(JSON.parse(window.localStorage.getItem(storageKey) ?? '[]'))
-  } catch {
-    return []
-  }
+  return clean(getPref('recentProjects', []))
 }
 
 export function addRecentProject(project: Project): RecentProject[] {

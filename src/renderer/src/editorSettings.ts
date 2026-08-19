@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { getPref, setPref } from './prefs'
 
 export type EditorColors = {
   text: string
@@ -58,7 +59,6 @@ export const defaultEditorSettings: EditorSettings = {
   colors: defaultEditorColors
 }
 
-const storageKey = 'opengms.editor-settings.v1'
 const listeners = new Set<() => void>()
 
 function number(value: unknown, fallback: number, min: number, max: number): number {
@@ -126,27 +126,22 @@ function normalize(value: Partial<EditorSettings>): EditorSettings {
 }
 
 function load(): EditorSettings {
-  try {
-    const saved = window.localStorage.getItem(storageKey)
-    if (saved) return normalize(JSON.parse(saved) as Partial<EditorSettings>)
-  } catch {
-    // Ignore malformed or unavailable local settings.
-  }
-  return defaults()
+  return normalize(getPref<Partial<EditorSettings>>('editor', {}))
 }
 
-let current = load()
+let current = defaults()
 
 function emit(): void {
   listeners.forEach((listener) => listener())
 }
 
 function save(): void {
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(current))
-  } catch {
-    // The active settings still apply for this session.
-  }
+  setPref('editor', current)
+}
+
+export function initEditorSettings(): void {
+  current = load()
+  emit()
 }
 
 export function updateEditorSettings(change: Partial<EditorSettings>): void {
