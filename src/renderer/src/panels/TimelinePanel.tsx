@@ -252,6 +252,15 @@ export function TimelinePanel({ params, api }: IDockviewPanelProps<TimelineParam
   }, [api, dirty, params.item.name])
 
   useEffect(() => {
+    if (!source || dirty) return
+    const next = copyTimeline(source)
+    const nextSaved = JSON.stringify(next)
+    if (nextSaved === saved) return
+    setTimeline(next)
+    setSaved(nextSaved)
+  }, [dirty, saved, source])
+
+  useEffect(() => {
     if (!timeline?.moments.length) {
       setMomentPos(-1)
       setActionPos(-1)

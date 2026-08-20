@@ -516,7 +516,7 @@ export function ExtensionPanel({
   const [extension, setExtension] = useState<ExtensionData | null>(() =>
     source ? copyExtension(source) : null
   )
-  const [saved, setSaved] = useState(() => source ? JSON.stringify(source) : '')
+  const [saved, setSaved] = useState(() => source ? JSON.stringify(copyExtension(source)) : '')
   const [page, setPage] = useState<Page>('general')
   const [config, setConfig] = useState(() => Object.keys(source?.copyMasks ?? {})[0] || 'Default')
   const [saving, setSaving] = useState(false)
@@ -526,6 +526,15 @@ export function ExtensionPanel({
   useEffect(() => {
     api.setTitle(`${params.item.name}${dirty ? ' •' : ''}`)
   }, [api, dirty, params.item.name])
+
+  useEffect(() => {
+    if (!source || dirty) return
+    const next = copyExtension(source)
+    const nextSaved = JSON.stringify(next)
+    if (nextSaved === saved) return
+    setExtension(next)
+    setSaved(nextSaved)
+  }, [dirty, saved, source])
 
   if (!extension) {
     return (

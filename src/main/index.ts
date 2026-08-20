@@ -349,16 +349,12 @@ function stringsFromCode(source: string): string {
     for (index += 1; index < source.length; index += 1) {
       const character = source[index]
       if (character === quote) break
-      if (character !== '\\') {
-        result += character
+      if (character === '\\' && source[index + 1] === '#') {
+        result += '#'
+        index += 1
         continue
       }
-
-      const escaped = source[index + 1]
-      if (!escaped) break
-      const simple: Record<string, string> = { n: '\n', r: '\r', t: '\t' }
-      result += simple[escaped] ?? escaped
-      index += 1
+      result += character === '#' ? '\n' : character
     }
   }
   return result

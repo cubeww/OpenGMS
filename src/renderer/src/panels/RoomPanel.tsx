@@ -42,6 +42,11 @@ import {
 import { EditorOk } from '../EditorOk'
 import { ResourceName } from '../ResourceName'
 import { ResourceSelect } from '../ResourceSelect'
+import {
+  matchResource,
+  resourceChangeEvent,
+  type ResourceChange
+} from '../resources'
 import { useSave } from '../save'
 import { useApp } from '../store'
 import { RoomCanvas, type RoomPage } from './RoomCanvas'
@@ -348,6 +353,7 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
   const [orderOpen, setOrderOpen] = useState(false)
   const [tileLayerDialog, setTileLayerDialog] = useState<'add' | 'change' | null>(null)
   const editVersion = useRef(0)
+  const objectChoiceReady = useRef(false)
   const searchTarget = useRef<CodeSearchResult | null>(null)
   const tilePanDrag = useRef<{ pointer: number; x: number; y: number; panX: number; panY: number } | null>(null)
   const sidebarDrag = useRef<{ pointer: number; x: number; width: number } | null>(null)
@@ -379,18 +385,24 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
   }, [params.item.file, params.item.id, room, updateRoom])
 
   useEffect(() => {
+    if (!room || !project || objectChoiceReady.current) return
+    objectChoiceReady.current = true
+    setObjectName(room.instances[0]?.object || objectItems[0]?.name || '')
+  }, [objectItems, project, room])
+
+  useEffect(() => {
     if (!room) return
-    if (!objectName) setObjectName(room.instances[0]?.object || objectItems[0]?.name || '')
     if (!tileBackground) {
       const first = room.tiles[0]?.background || backgroundItems.find((item) => item.background?.tileSet)?.name || backgroundItems[0]?.name || ''
       setTileBackground(first)
     }
-  }, [backgroundItems, objectItems, objectName, room, tileBackground])
+  }, [backgroundItems, room, tileBackground])
 
   useEffect(() => {
     function selectObject(event: Event): void {
       const item = (event as CustomEvent<ResourceItem>).detail
       if (!item || item.kind !== 'resource' || item.type !== 'object') return
+      objectChoiceReady.current = true
       setObjectName(item.name)
       setSelectedInstance('')
       setPage('objects')
@@ -399,6 +411,66 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
     window.addEventListener('opengms:resource-selected', selectObject)
     return () => window.removeEventListener('opengms:resource-selected', selectObject)
   }, [])
+
+  useEffect(() => {
+    function resourcesChanged(event: Event): void {
+      const change = (event as CustomEvent<ResourceChange>).detail
+      if (!change?.previous || !change.project) return
+
+      const renamed = change.renamed
+      if (renamed) {
+        const previous = items(change.previous, renamed.item.type)
+          .find((item) => item.id === renamed.oldId)
+        if (previous?.type === 'object' && renamed.item.type === 'object') {
+          setRoom((current) => {
+            if (!current) return current
+            const instances = current.instances.map((item) => item.object === previous.name
+              ? { ...item, object: renamed.item.name }
+              : item)
+            const views = current.views.map((item) => item.object === previous.name
+              ? { ...item, object: renamed.item.name }
+              : item)
+            const changed = instances.some((item, index) => item !== current.instances[index])
+              || views.some((item, index) => item !== current.views[index])
+            return changed ? { ...current, instances, views } : current
+          })
+        } else if (previous?.type === 'background' && renamed.item.type === 'background') {
+          setRoom((current) => {
+            if (!current) return current
+            const backgrounds = current.backgrounds.map((item) => item.name === previous.name
+              ? { ...item, name: renamed.item.name }
+              : item)
+            const tiles = current.tiles.map((item) => item.background === previous.name
+              ? { ...item, background: renamed.item.name }
+              : item)
+            const changed = backgrounds.some((item, index) => item !== current.backgrounds[index])
+              || tiles.some((item, index) => item !== current.tiles[index])
+            return changed ? { ...current, backgrounds, tiles } : current
+          })
+        }
+      }
+
+      if (objectName) {
+        const previous = items(change.previous, 'object').find((item) => item.name === objectName)
+        if (previous) {
+          const next = matchResource(change, previous)
+          objectChoiceReady.current = true
+          setObjectName(next?.type === 'object' ? next.name : '')
+        }
+      }
+
+      if (tileBackground) {
+        const previous = items(change.previous, 'background').find((item) => item.name === tileBackground)
+        if (previous) {
+          const next = matchResource(change, previous)
+          setTileBackground(next?.type === 'background' ? next.name : '')
+        }
+      }
+    }
+
+    window.addEventListener(resourceChangeEvent, resourcesChanged)
+    return () => window.removeEventListener(resourceChangeEvent, resourcesChanged)
+  }, [objectName, tileBackground])
 
   useEffect(() => {
     api.setTitle(`${params.item.name}${dirty ? ' •' : ''}`)
@@ -844,7 +916,16 @@ export function RoomPanel({ params, api }: IDockviewPanelProps<RoomParams>): Rea
           {selected && <button className="room-wide-button danger" onClick={() => deleteInstance(selected.name)}><Trash2 size={14} /> Delete selected</button>}
         </Group>
         <Group title="Object to add with left mouse">
-          <ResourceSelect value={objectName} options={objectItems} project={project} placeholder="Search objects" onChange={setObjectName} />
+          <ResourceSelect
+            value={objectName}
+            options={objectItems}
+            project={project}
+            placeholder="Search objects"
+            onChange={(name) => {
+              objectChoiceReady.current = true
+              setObjectName(name)
+            }}
+          />
           <div className="room-tree-tip"><Info size={14} /><span><strong>Tip:</strong> You can also select an Object in the resource tree.</span></div>
           <CheckField label="Delete underlying" checked={deleteObjects} onChange={setDeleteObjects} />
         </Group>

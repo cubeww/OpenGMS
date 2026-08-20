@@ -4,6 +4,7 @@ import { parseScriptInfo } from '../../shared/script'
 import { codeBuffer } from './codeReveal'
 import { projectGmlSources } from './codeSearch'
 import { gmlFunctions, type GmlFunction } from './gmlBuiltins'
+import { gmlCoreFunctions } from './gmlCore'
 import { gmlConstants, gmlVariables } from './gmlSymbols'
 import { useApp } from './store'
 
@@ -135,7 +136,9 @@ const hiddenFunctions: GmlFunction[] = [
 
 function expandedFunctions(): GmlFunction[] {
   const result = new Map<string, GmlFunction>()
-  for (const item of [...gmlFunctions, ...hiddenFunctions]) result.set(item.name, item)
+  for (const item of [...gmlFunctions, ...gmlCoreFunctions, ...hiddenFunctions]) {
+    result.set(item.name, item)
+  }
 
   const spellings = [
     ['colour', 'color'],
@@ -210,14 +213,8 @@ function codeMask(source: string): string {
       continue
     }
     if (quote) {
-      if (char === '\\') {
-        result[index] = ' '
-        if (index + 1 < result.length) result[index + 1] = ' '
-        index += 1
-      } else {
-        if (char === quote) quote = ''
-        if (char !== '\n' && char !== '\r') result[index] = ' '
-      }
+      if (char === quote) quote = ''
+      if (char !== '\n' && char !== '\r') result[index] = ' '
       continue
     }
     if (char === '/' && next === '/') {
@@ -621,10 +618,10 @@ function resourceTargets(model: Monaco.editor.ITextModel): GmlResourceTarget[] {
   ])
   const targets: GmlResourceTarget[] = []
   let blockComment = false
+  let quote = ''
 
   for (let lineNumber = 1; lineNumber <= model.getLineCount(); lineNumber += 1) {
     const line = model.getLineContent(lineNumber)
-    let quote = ''
 
     for (let index = 0; index < line.length;) {
       const char = line[index]
@@ -639,11 +636,8 @@ function resourceTargets(model: Monaco.editor.ITextModel): GmlResourceTarget[] {
       }
 
       if (quote) {
-        if (char === '\\') index += 2
-        else {
-          if (char === quote) quote = ''
-          index += 1
-        }
+        if (char === quote) quote = ''
+        index += 1
         continue
       }
 
@@ -787,8 +781,7 @@ function activeCall(model: Monaco.editor.ITextModel, position: Monaco.Position):
       continue
     }
     if (quote) {
-      if (char === '\\') index += 1
-      else if (char === quote) quote = ''
+      if (char === quote) quote = ''
       continue
     }
     if (char === '/' && next === '/') {
@@ -926,7 +919,6 @@ export function registerGml(api: MonacoApi): void {
         [/[{}()[\]]/, '@brackets'],
         [/[;,.]/, 'delimiter'],
         [/[<>!=~?:&|+\-*/^%@#]+/, 'operator'],
-        [/"([^"\\]|\\.)*$/, 'string.invalid'],
         [/"/, 'string', '@stringDouble'],
         [/'/, 'string', '@stringSingle']
       ],
@@ -936,13 +928,17 @@ export function registerGml(api: MonacoApi): void {
         [/[/*]/, 'comment']
       ],
       stringDouble: [
-        [/[^\\"]+/, 'string'],
-        [/\\./, 'string.escape'],
+        [/\\#/, 'string.escape'],
+        [/#/, 'string.escape'],
+        [/[^\\#"]+/, 'string'],
+        [/\\(?!#)/, 'string'],
         [/"/, 'string', '@pop']
       ],
       stringSingle: [
-        [/[^\\']+/, 'string'],
-        [/\\./, 'string.escape'],
+        [/\\#/, 'string.escape'],
+        [/#/, 'string.escape'],
+        [/[^\\#']+/, 'string'],
+        [/\\(?!#)/, 'string'],
         [/'/, 'string', '@pop']
       ]
     }

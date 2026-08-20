@@ -5,23 +5,25 @@ import {
   ArrowDown,
   ArrowUp,
   Box,
-  Boxes,
   Braces,
   ChevronLeft,
   CircleDot,
   ClipboardPaste,
   Clock3,
   Copy,
+  Earth,
+  FoldHorizontal,
   Footprints,
   Image as ImageIcon,
   Keyboard,
-  KeyRound,
+  Lightbulb,
   MousePointer2,
-  Paintbrush,
   Pencil,
   Plus,
   Scissors,
-  Sparkles,
+  Shapes,
+  SquareArrowDown,
+  SquareArrowUp,
   Trash2,
   X,
   Zap,
@@ -89,18 +91,18 @@ type ClipboardMenu = {
 }
 
 const eventCategories: EventCategory[] = [
-  { id: 'create', label: 'Create', icon: Sparkles, event: makeEvent(0) },
+  { id: 'create', label: 'Create', icon: Lightbulb, event: makeEvent(0) },
   { id: 'mouse', label: 'Mouse', icon: MousePointer2, group: 'mouse' },
   { id: 'destroy', label: 'Destroy', icon: Trash2, event: makeEvent(1) },
   { id: 'other', label: 'Other', icon: CircleDot, group: 'other' },
   { id: 'alarm', label: 'Alarm', icon: AlarmClock, group: 'alarm' },
-  { id: 'draw', label: 'Draw', icon: Paintbrush, group: 'draw' },
+  { id: 'draw', label: 'Draw', icon: Shapes, group: 'draw' },
   { id: 'step', label: 'Step', icon: Footprints, group: 'step' },
-  { id: 'keypress', label: 'Key Press', icon: KeyRound, group: 'keypress' },
-  { id: 'collision', label: 'Collision', icon: Boxes, group: 'collision' },
-  { id: 'keyrelease', label: 'Key Release', icon: Keyboard, group: 'keyrelease' },
+  { id: 'keypress', label: 'Key Press', icon: SquareArrowDown, group: 'keypress' },
+  { id: 'collision', label: 'Collision', icon: FoldHorizontal, group: 'collision' },
+  { id: 'keyrelease', label: 'Key Release', icon: SquareArrowUp, group: 'keyrelease' },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard, group: 'keyboard' },
-  { id: 'async', label: 'Asynchronous', icon: Zap, group: 'async' }
+  { id: 'async', label: 'Asynchronous', icon: Earth, group: 'async' }
 ]
 
 const mouseNames: Record<number, string> = {
@@ -337,7 +339,7 @@ function sortEvents(events: ObjectEvent[], objectItems: ObjectItem[]): ObjectEve
 }
 
 function eventIcon(type: number): LucideIcon {
-  return [Sparkles, Trash2, AlarmClock, Footprints, Boxes, Keyboard, MousePointer2, CircleDot, Paintbrush, KeyRound, Keyboard, Zap][type] ?? Zap
+  return [Lightbulb, Trash2, AlarmClock, Footprints, FoldHorizontal, Keyboard, MousePointer2, CircleDot, Shapes, SquareArrowDown, SquareArrowUp, Earth][type] ?? Zap
 }
 
 function pickerOptions(group: PickerGroup, objectItems: ObjectItem[]): Array<{ label: string; event: ObjectEvent }> {
@@ -677,7 +679,12 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
     initial.events = sortEvents(initial.events, objectItems)
     return initial
   })
-  const [saved, setSaved] = useState(() => source ? JSON.stringify(source) : '')
+  const [saved, setSaved] = useState(() => {
+    if (!source) return ''
+    const initial = copyObject(source)
+    initial.events = sortEvents(initial.events, objectItems)
+    return JSON.stringify(initial)
+  })
   const [eventPos, setEventPos] = useState(source?.events.length ? 0 : -1)
   const [actionPos, setActionPos] = useState(-1)
   const [picker, setPicker] = useState<'add' | 'change' | null>(null)
@@ -716,6 +723,16 @@ export function ObjectPanel({ params, api }: IDockviewPanelProps<ObjectParams>):
   useEffect(() => {
     api.setTitle(`${params.item.name}${dirty ? ' •' : ''}`)
   }, [api, dirty, params.item.name])
+
+  useEffect(() => {
+    if (!source || dirty) return
+    const next = copyObject(source)
+    next.events = sortEvents(next.events, objectItems)
+    const nextSaved = JSON.stringify(next)
+    if (nextSaved === saved) return
+    setObject(next)
+    setSaved(nextSaved)
+  }, [dirty, objectItems, saved, source])
 
   useEffect(() => {
     if (!clipboardMenu) return

@@ -55,9 +55,9 @@ function projectSource(): string {
     '  <shaders name="shaders"/>',
     '  <fonts name="fonts"/>',
     '  <timelines name="timelines"/>',
-    '  <objects name="objects"/>',
-    '  <rooms name="rooms">',
-    '    <room>rooms\\room0</room>',
+  '  <objects name="objects"/>',
+  '  <rooms name="rooms">',
+  '    <room>rooms\\room1</room>',
     '  </rooms>',
     '  <datafiles number="0" name="datafiles"/>',
     '  <constants number="0"/>',
@@ -171,7 +171,7 @@ export async function createProject(selectedPath: string): Promise<string> {
     await Promise.all([
       writeFile(join(stagedFolder, `${name}.project.gmx`), projectSource(), 'utf8'),
       writeFile(join(stagedFolder, 'Configs', 'Default.config.gmx'), configSource(name), 'utf8'),
-      writeFile(join(stagedFolder, 'rooms', 'room0.room.gmx'), roomSource(), 'utf8')
+      writeFile(join(stagedFolder, 'rooms', 'room1.room.gmx'), roomSource(), 'utf8')
     ])
     await rename(stagedFolder, targetFolder)
   } finally {

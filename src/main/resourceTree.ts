@@ -611,6 +611,267 @@ function replaceTag(source: string, name: string, value: string): string {
     : source
 }
 
+type ResourceEdit = {
+  file: string
+  before: string
+  after: string
+}
+
+const actionArgumentKinds: Partial<Record<ResourceType, number>> = {
+  sprite: 5,
+  sound: 6,
+  background: 7,
+  path: 8,
+  script: 9,
+  object: 10,
+  room: 11,
+  font: 12,
+  timeline: 14
+}
+
+const actionArgumentTags: Record<number, string> = {
+  5: 'sprite',
+  6: 'sound',
+  7: 'background',
+  8: 'path',
+  9: 'script',
+  10: 'object',
+  11: 'room',
+  12: 'font',
+  14: 'timeline'
+}
+
+const includedResourceTypes: Record<string, ResourceType> = {
+  sprite: 'sprite',
+  sprites: 'sprite',
+  sound: 'sound',
+  sounds: 'sound',
+  background: 'background',
+  backgrounds: 'background',
+  path: 'path',
+  paths: 'path',
+  script: 'script',
+  scripts: 'script',
+  shader: 'shader',
+  shaders: 'shader',
+  font: 'font',
+  fonts: 'font',
+  timeline: 'timeline',
+  timelines: 'timeline',
+  object: 'object',
+  objects: 'object',
+  room: 'room',
+  rooms: 'room',
+  file: 'file',
+  files: 'file',
+  includedfile: 'file',
+  datafile: 'file',
+  extension: 'extension',
+  extensions: 'extension'
+}
+
+function decodeXml(value: string): string {
+  return value
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&amp;/gi, '&')
+}
+
+function replaceElementReference(
+  source: string,
+  tagName: string,
+  oldName: string,
+  nextName: string
+): string {
+  const pattern = new RegExp(
+    `(<${escaped(tagName)}\\b[^>]*>)(\\s*)${escaped(xml(oldName))}(\\s*)(<\\/${escaped(tagName)}>)`,
+    'gi'
+  )
+  return source.replace(pattern, (_match, open: string, leading: string, trailing: string, close: string) =>
+    `${open}${leading}${xml(nextName)}${trailing}${close}`)
+}
+
+function replaceTagAttributeReference(
+  source: string,
+  tagName: string,
+  attribute: string,
+  oldName: string,
+  nextName: string
+): string {
+  const tags = new RegExp(`<${escaped(tagName)}\\b[^>]*>`, 'gi')
+  const value = new RegExp(
+    `(\\b${escaped(attribute)}\\s*=\\s*["'])${escaped(xmlAttr(oldName))}(["'])`,
+    'i'
+  )
+  return source.replace(tags, (entry) => entry.replace(value, `$1${xmlAttr(nextName)}$2`))
+}
+
+function replaceActionArgumentReferences(
+  source: string,
+  type: ResourceType,
+  oldName: string,
+  nextName: string
+): string {
+  const kind = actionArgumentKinds[type]
+  if (kind === undefined) return source
+  const valueTag = actionArgumentTags[kind]
+  return source.replace(/<argument\b[^>]*>[\s\S]*?<\/argument>/gi, (argument) => {
+    const match = argument.match(/<kind\b[^>]*>\s*(\d+)\s*<\/kind>/i)
+    if (Number(match?.[1]) !== kind) return argument
+    const replaced = replaceElementReference(argument, valueTag, oldName, nextName)
+    return replaced === argument
+      ? replaceElementReference(argument, 'string', oldName, nextName)
+      : replaced
+  })
+}
+
+function replaceIncludedResourceReferences(
+  source: string,
+  type: ResourceType,
+  oldPath: string,
+  nextPath: string
+): string {
+  const oldKey = cleanPath(oldPath).toLowerCase()
+  if (!oldKey) return source
+  return source.replace(
+    /(<IncludedResources\b[^>]*>)([\s\S]*?)(<\/IncludedResources>)/gi,
+    (_section, open: string, contents: string, close: string) => {
+      const next = contents.replace(
+        /<([A-Za-z_][\w:.-]*)\b([^>]*)>([^<]*)<\/\1>/gi,
+        (entry, nodeName: string, attributes: string, value: string) => {
+          const typeMatch = attributes.match(/\btype\s*=\s*["']([^"']+)["']/i)
+          const hint = (typeMatch?.[1] || nodeName).toLowerCase().replace(/[\s_-]/g, '')
+          if (includedResourceTypes[hint] !== type) return entry
+          if (cleanPath(decodeXml(value)).toLowerCase() !== oldKey) return entry
+          const separator = value.includes('\\') ? '\\' : '/'
+          const path = cleanPath(nextPath).replace(/\//g, separator)
+          return entry.replace(value, () => xml(path))
+        }
+      )
+      return `${open}${next}${close}`
+    }
+  )
+}
+
+function replaceResourceReferences(
+  file: string,
+  source: string,
+  type: ResourceType,
+  oldName: string,
+  nextName: string,
+  oldPath: string,
+  nextPath: string
+): string {
+  const path = file.toLowerCase()
+  let result = source
+  if (path.endsWith('.object.gmx')) {
+    if (type === 'sprite') {
+      result = replaceElementReference(result, 'spriteName', oldName, nextName)
+      result = replaceElementReference(result, 'maskName', oldName, nextName)
+    } else if (type === 'object') {
+      result = replaceElementReference(result, 'parentName', oldName, nextName)
+      result = replaceElementReference(result, 'whoName', oldName, nextName)
+      result = replaceTagAttributeReference(result, 'event', 'ename', oldName, nextName)
+    }
+    result = replaceActionArgumentReferences(result, type, oldName, nextName)
+  } else if (path.endsWith('.timeline.gmx')) {
+    result = replaceActionArgumentReferences(result, type, oldName, nextName)
+  } else if (path.endsWith('.room.gmx')) {
+    if (type === 'background') {
+      result = replaceTagAttributeReference(result, 'background', 'name', oldName, nextName)
+      result = replaceTagAttributeReference(result, 'tile', 'bgName', oldName, nextName)
+    } else if (type === 'object') {
+      result = replaceTagAttributeReference(result, 'view', 'objName', oldName, nextName)
+      result = replaceTagAttributeReference(result, 'instance', 'objName', oldName, nextName)
+    }
+  } else if (path.endsWith('.extension.gmx')) {
+    result = replaceIncludedResourceReferences(result, type, oldPath, nextPath)
+  }
+  return result
+}
+
+async function resourceReferenceEdits(
+  tree: ProjectTree,
+  type: ResourceType,
+  oldName: string,
+  nextName: string,
+  oldPath: string,
+  nextPath: string,
+  excluded: Set<string>
+): Promise<ResourceEdit[]> {
+  const folders = [
+    ['objects', '.object.gmx'],
+    ['timelines', '.timeline.gmx'],
+    ['rooms', '.room.gmx'],
+    ['extensions', '.extension.gmx']
+  ] as const
+  const edits: ResourceEdit[] = []
+  let visited = 0
+  let bytes = 0
+
+  async function visit(folder: string, suffix: string): Promise<void> {
+    let entries
+    try {
+      entries = await readdir(folder, { withFileTypes: true })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+      throw error
+    }
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue
+      const file = join(folder, entry.name)
+      if (entry.isDirectory()) {
+        await visit(file, suffix)
+        continue
+      }
+      if (!entry.isFile() || !entry.name.toLowerCase().endsWith(suffix)) continue
+      visited += 1
+      if (visited > 20000) throw new Error('Project has too many resource files to rename safely')
+      if (excluded.has(pathKey(file))) continue
+      const info = await stat(file)
+      if (info.size > maxResourceSize || bytes + info.size > 512 * 1024 * 1024) {
+        throw new Error('Project resource references are too large to rename safely')
+      }
+      bytes += info.size
+      const before = await readFile(file, 'utf8')
+      const after = replaceResourceReferences(
+        file,
+        before,
+        type,
+        oldName,
+        nextName,
+        oldPath,
+        nextPath
+      )
+      if (after !== before) edits.push({ file, before, after })
+    }
+  }
+
+  for (const [folder, suffix] of folders) {
+    await visit(resolve(tree.folder, folder), suffix)
+  }
+  return edits
+}
+
+async function applyResourceEdits(edits: ResourceEdit[]): Promise<() => Promise<void>> {
+  const written: ResourceEdit[] = []
+  try {
+    for (const edit of edits) {
+      written.push(edit)
+      await writeFile(edit.file, edit.after, 'utf8')
+    }
+  } catch (error) {
+    await Promise.allSettled(written.map((edit) => writeFile(edit.file, edit.before, 'utf8')))
+    throw error
+  }
+  return async () => {
+    await Promise.allSettled([...written].reverse().map((edit) =>
+      writeFile(edit.file, edit.before, 'utf8')))
+  }
+}
+
 async function copyDependency(
   source: string,
   target: string,
@@ -1247,8 +1508,12 @@ export async function renameResourceItem(
     return []
   }
   const current = resourceAt(tree.items, ref)
+  const oldName = nodeName(current.node, tree.spec)
+  const oldPath = tree.spec.mode === 'files'
+    ? current.node.data?.filename || current.node.value
+    : current.node.value
   const names = allNames(tree.items, tree.spec)
-  names.delete(nodeName(current.node, tree.spec).toLowerCase())
+  names.delete(oldName.toLowerCase())
   if (names.has(name.toLowerCase())) throw new Error(`Resource ${name} already exists`)
   if (tree.spec.mode === 'files') {
     const before = fileLocations(tree)
@@ -1256,7 +1521,22 @@ export async function renameResourceItem(
     const filename = extname(name) ? name : `${name}${extension}`
     current.node.value = filename
     current.node.data = { ...current.node.data!, name: filename, filename }
-    await saveWithFileMoves(tree, before)
+    const edits = await resourceReferenceEdits(
+      tree,
+      ref.type,
+      oldName,
+      filename,
+      oldPath,
+      filename,
+      new Set()
+    )
+    const rollback = await applyResourceEdits(edits)
+    try {
+      await saveWithFileMoves(tree, before)
+    } catch (error) {
+      await rollback()
+      throw error
+    }
     return []
   }
   const oldFiles = await resourceFiles(tree, current.node, ref.groupPath)
@@ -1270,18 +1550,46 @@ export async function renameResourceItem(
   if (!existsSync(oldFile)) {
     if (existsSync(newFile)) throw new Error(`Resource ${name} already exists`)
     current.parent[current.index] = node
-    await saveWithFileMoves(tree, undefined)
+    const edits = await resourceReferenceEdits(
+      tree,
+      ref.type,
+      oldName,
+      name,
+      oldPath,
+      node.value,
+      new Set([pathKey(oldFile)])
+    )
+    const rollback = await applyResourceEdits(edits)
+    try {
+      await saveWithFileMoves(tree, undefined)
+    } catch (error) {
+      await rollback()
+      throw error
+    }
     return []
   }
   const created = await copyResourceFile(ref.type, oldFile, newFile, name, tree.folder)
   current.parent[current.index] = node
+  let rollback: (() => Promise<void>) | undefined
+  let kept: Set<string>
   try {
+    const edits = await resourceReferenceEdits(
+      tree,
+      ref.type,
+      oldName,
+      name,
+      oldPath,
+      node.value,
+      new Set([pathKey(oldFile)])
+    )
+    kept = await usedResourceFiles(tree)
+    rollback = await applyResourceEdits(edits)
     await saveWithFileMoves(tree, undefined)
   } catch (error) {
+    await rollback?.()
     await removeCreated(created)
     throw error
   }
-  const kept = await usedResourceFiles(tree)
   return oldFiles.filter((file) => !kept.has(pathKey(file)))
 }
 
