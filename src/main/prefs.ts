@@ -10,7 +10,7 @@ import { open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PrefKey, Prefs } from '../shared/types'
 
-const keys = new Set<PrefKey>(['editor', 'layout', 'recentProjects', 'recentColors', 'dialogFolders'])
+const keys = new Set<PrefKey>(['editor', 'layout', 'recentProjects', 'recentColors', 'dialogFolders', 'codeDialogs'])
 const folder = app.getPath('userData')
 const file = join(folder, 'preferences.json')
 const migrateLock = join(folder, 'preferences.migrate.lock')

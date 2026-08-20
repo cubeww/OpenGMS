@@ -17,6 +17,8 @@ import {
   Image as ImageIcon,
   Keyboard,
   Lightbulb,
+  Maximize2,
+  Minimize2,
   MousePointer2,
   Pencil,
   Plus,
@@ -42,6 +44,7 @@ import type {
 } from '../../../shared/types'
 import { assetUrl } from '../assets'
 import { CodeEditor } from '../CodeEditor'
+import { useCodeDialog } from '../codeDialog'
 import { requestCodeReveal } from '../codeReveal'
 import { listenSearchReveal } from '../codeSearch'
 import { EditorOk } from '../EditorOk'
@@ -559,24 +562,37 @@ export function ActionEditor({
 }): React.JSX.Element {
   const codeAction = isCodeAction(action, info)
   const title = info?.description || info?.name || `Action ${action.id}`
+  const { dialogRef, maximized, toggleMaximized, closeDialog } = useCodeDialog('action', codeAction)
 
   useEffect(() => {
     function close(event: KeyboardEvent): void {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') closeDialog(onClose)
     }
     window.addEventListener('keydown', close)
     return () => window.removeEventListener('keydown', close)
-  }, [onClose])
+  }, [closeDialog, onClose])
 
   return (
-    <div className="object-dialog-backdrop action-editor-backdrop" role="presentation" onMouseDown={onClose}>
-      <section className={`action-editor-dialog ${codeAction ? 'code' : ''}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+    <div className={`object-dialog-backdrop action-editor-backdrop ${maximized ? 'maximized' : ''}`} role="presentation" onMouseDown={() => closeDialog(onClose)}>
+      <section ref={dialogRef} className={`action-editor-dialog ${codeAction ? 'code' : ''} ${maximized ? 'maximized' : ''}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
         <header>
           <div className="action-editor-name">
             {info?.icon ? <img src={info.icon} alt="" /> : <Braces size={18} />}
             <div><strong>{title}</strong><small>{info?.name || `Library ${action.libId} · Action ${action.id}`}</small></div>
           </div>
-          <button onClick={onClose} title="Close"><X size={16} /></button>
+          <div className="action-editor-window-actions">
+            {codeAction && (
+              <button
+                type="button"
+                aria-label={maximized ? 'Restore code editor' : 'Maximize code editor'}
+                title={maximized ? 'Restore' : 'Maximize'}
+                onClick={toggleMaximized}
+              >
+                {maximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              </button>
+            )}
+            <button type="button" onClick={() => closeDialog(onClose)} title="Close"><X size={16} /></button>
+          </div>
         </header>
 
         {codeAction ? (

@@ -4974,7 +4974,7 @@ select:focus-visible {
 .object-action-tools button,
 .object-library nav button,
 .event-picker header button,
-.action-editor-dialog > header > button {
+.action-editor-window-actions button {
   display: grid;
   place-items: center;
   height: 27px;
@@ -4991,9 +4991,9 @@ select:focus-visible {
 
 .object-action-tools button:hover:not(:disabled),
 .event-picker header button:hover,
-.action-editor-dialog > header > button:hover {
+.action-editor-window-actions button:hover {
   color: #e8edf3;
-  background: #27313e;
+  background: transparent;
 }
 
 .object-action-tools button:disabled {
@@ -5269,7 +5269,7 @@ select:focus-visible {
 }
 
 .event-picker header button,
-.action-editor-dialog > header > button {
+.action-editor-window-actions button {
   width: 29px;
   padding: 0;
 }
@@ -5379,6 +5379,10 @@ select:focus-visible {
   z-index: 50;
 }
 
+.action-editor-backdrop.maximized {
+  padding: 0;
+}
+
 .action-editor-dialog {
   display: grid;
   grid-template-rows: 52px minmax(0, 1fr) 49px;
@@ -5395,6 +5399,31 @@ select:focus-visible {
   max-width: 100%;
   max-height: 100%;
   resize: both;
+}
+
+.action-editor-dialog.code.maximized {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  resize: none;
+}
+
+.action-editor-window-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.action-editor-window-actions button,
+.action-editor-window-actions button:hover:not(:disabled) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
 .action-editor-name {

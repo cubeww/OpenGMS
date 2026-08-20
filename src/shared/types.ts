@@ -632,7 +632,7 @@ export type BuildOutput = {
   text: string
 }
 
-export type PrefKey = 'editor' | 'layout' | 'recentProjects' | 'recentColors' | 'dialogFolders'
+export type PrefKey = 'editor' | 'layout' | 'recentProjects' | 'recentColors' | 'dialogFolders' | 'codeDialogs'
 
 export type Prefs = Partial<Record<PrefKey, unknown>>
 
