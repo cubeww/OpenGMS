@@ -5,7 +5,6 @@ import { dirname, join, resolve } from 'node:path'
 const requiredFiles = [
   'gmx.exe',
   'Runner.exe',
-  'ffmpeg.exe',
   'HLSLCompiler.exe',
   'libEGL.dll',
   'libGLESv2.dll',

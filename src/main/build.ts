@@ -129,7 +129,12 @@ export class BuildService {
       if (job.stopped) return
 
       if (job.mode === 'clean') {
-        const cleaned = await this.runProcess(job, compiler.file, ['clean'], project.folder)
+        const cleaned = await this.runProcess(
+          job,
+          compiler.file,
+          ['clean', '--manifest-path', project.path, '--target-dir', buildFolder],
+          project.folder
+        )
         if (job.stopped) return
         if (cleaned.code !== 0) {
           this.write('stderr', `Clean failed with exit code ${cleaned.code ?? cleaned.signal ?? 'unknown'}.`)
@@ -145,7 +150,15 @@ export class BuildService {
       const built = await this.runProcess(
         job,
         compiler.file,
-        ['build', project.path, dataFile, config],
+        [
+          'build',
+          '--manifest-path',
+          project.path,
+          '--target-dir',
+          buildFolder,
+          '--config',
+          config
+        ],
         project.folder
       )
       if (job.stopped) return
