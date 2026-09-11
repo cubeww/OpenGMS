@@ -42,7 +42,7 @@ import type {
 } from '../../../shared/types'
 import { ensureFontsBaked } from '../fontBakeQueue'
 import { assetUrl } from '../assets'
-import { notifyResourceChange, renameResource } from '../resources'
+import { notifyResourceChange, renameResource, resourceItems, resourceRef } from '../resources'
 import { saveAll } from '../save'
 import { useApp } from '../store'
 
@@ -422,7 +422,8 @@ export function ResourcePanel(): React.JSX.Element {
     function selectResource(event: Event): void {
       const item = (event as CustomEvent<ResourceItem>).detail
       if (!item || item.kind !== 'resource') return
-      const ref: ResourceTreeRef = {
+      const currentProject = useApp.getState().project
+      const ref = (currentProject && resourceRef(currentProject, item)) ?? {
         type: item.type,
         kind: 'resource',
         groupPath: [],
@@ -431,7 +432,14 @@ export function ResourcePanel(): React.JSX.Element {
       setQuery('')
       setMenu(null)
       setRename(null)
-      setExpanded((current) => new Set(current).add(`root:${item.type}`))
+      setExpanded((current) => {
+        const next = new Set(current)
+        next.add(`root:${item.type}`)
+        ref.groupPath.forEach((_name, index) => {
+          next.add(`${item.type}:group:${ref.groupPath.slice(0, index + 1).join('/')}`)
+        })
+        return next
+      })
       setSelection({ id: item.id, ref, item, name: item.name })
       window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
         const row = Array.from(document.querySelectorAll<HTMLElement>('[data-resource-id]'))
@@ -546,9 +554,9 @@ export function ResourcePanel(): React.JSX.Element {
         previous: project,
         project: next
       })
-      await after?.(next)
       setSelection(null)
       setExpanded((current) => new Set(current).add(`root:${menu?.ref.type ?? selection?.ref?.type ?? ''}`))
+      await after?.(next)
       addLog(`${label}.`)
     } catch (error) {
       const message = errorText(error)
@@ -564,10 +572,31 @@ export function ResourcePanel(): React.JSX.Element {
   }
 
   function createAt(ref: ResourceTreeRef): void {
+    const groupPath = childGroup(ref)
+    const known = new Set(
+      project
+        ? resourceItems(project).filter((item) => item.type === ref.type).map((item) => item.id)
+        : []
+    )
     void runProjectAction(
       `Created ${resourceName(ref.type)}`,
-      () => window.openGms.createResource(ref.type, childGroup(ref)),
-      ref.type === 'font' ? async (project) => { await ensureFontsBaked(project) } : undefined
+      () => window.openGms.createResource(ref.type, groupPath),
+      async (next) => {
+        if (ref.type === 'font') await ensureFontsBaked(next)
+        const current = useApp.getState().project ?? next
+        const item = resourceItems(current).find((candidate) =>
+          candidate.type === ref.type && !known.has(candidate.id)
+        )
+        if (!item) return
+        const itemRef = resourceRef(current, item) ?? {
+          type: item.type,
+          kind: 'resource' as const,
+          groupPath,
+          path: item.path
+        }
+        window.dispatchEvent(new CustomEvent('opengms:select-resource', { detail: item }))
+        openResource(item, itemRef)
+      }
     )
   }
 
