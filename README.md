@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> OpenGMS is no longer actively maintained. Please use [QtGMS](https://github.com/cubeww/QtGMS) instead.
+
 # OpenGMS
 
 A modern Windows-focused editor for GameMaker Studio 1.4 `.project.gmx` projects.
